@@ -2,7 +2,7 @@ import { config } from '../config/config'
 import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 
-export type Role = 'ADMIN' | 'STAFF' | 'EVDRIVER' | 'BUSINESS'
+export type Role = 'ADMIN' | 'MANAGER' | 'ARTIST' | 'CUSTOMER' | 'SELLER'
 
 export interface AuthUser {
   userId: number

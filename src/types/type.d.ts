@@ -1,90 +1,267 @@
+// ==================== ENUMS ====================
+
 // Enum cho Role
-export enum Role {
-  Admin = 'Admin',
-  Manager = 'Manager',
-  Staff = 'Staff',
-  Customer = 'Customer'
+export enum RoleName {
+  ADMIN = 'ADMIN',
+  MANAGER = 'MANAGER',
+  ARTIST = 'ARTIST',
+  CUSTOMER = 'CUSTOMER',
+  SELLER = 'SELLER'
 }
 
-// Enum cho ServiceType
-export enum ServiceType {
-  Administrative = 'Administrative',
-  Civil = 'Civil'
+// Enum cho CompanyType
+export enum CompanyType {
+  BRAND = 'BRAND',
+  AGENCY = 'AGENCY',
+  STUDIO = 'STUDIO',
+  SELLER = 'SELLER'
 }
 
-// Enum cho SampleCount
-export enum SampleCount {
-  Two = 2,
-  Three = 3
+// Enum cho Company Status
+export enum CompanyStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  SUSPENDED = 'SUSPENDED'
 }
 
-// Enum cho CollectionMethod
-export enum CollectionMethod {
-  Home = 'Home',
-  Facility = 'Facility'
+// Enum cho Creative Order Status
+export enum CreativeOrderStatus {
+  NEW = 'NEW',
+  IN_PRODUCTION = 'IN_PRODUCTION',
+  REVIEW = 'REVIEW',
+  COMPLETED = 'COMPLETED',
+  DELIVERED = 'DELIVERED',
+  CANCELLED = 'CANCELLED'
 }
 
-// Enum cho PaymentStatus
+// Enum cho Production Stage Name
+export enum ProductionStageName {
+  PHOTOSHOOT = 'PHOTOSHOOT',
+  MODELING = 'MODELING',
+  SCENE_DESIGN = 'SCENE_DESIGN',
+  POST_PROCESS = 'POST_PROCESS'
+}
+
+// Enum cho Production Stage Status
+export enum ProductionStageStatus {
+  PENDING = 'PENDING',
+  IN_PROGRESS = 'IN_PROGRESS',
+  DONE = 'DONE'
+}
+
+// Enum cho Asset Type
+export enum AssetType {
+  ORDER = 'ORDER',
+  MARKETPLACE = 'MARKETPLACE',
+  TEMPLATE = 'TEMPLATE'
+}
+
+// Enum cho Asset Publish Status
+export enum AssetPublishStatus {
+  DRAFT = 'DRAFT',
+  PENDING = 'PENDING',
+  PUBLISHED = 'PUBLISHED',
+  REJECTED = 'REJECTED'
+}
+
+// Enum cho File Format
+export enum FileFormat {
+  GLB = 'GLB',
+  USDZ = 'USDZ',
+  FBX = 'FBX',
+  WEBAR = 'WEBAR'
+}
+
+// Enum cho Payment Type
+export enum PaymentType {
+  DEPOSIT = 'DEPOSIT',
+  FULL = 'FULL',
+  MILESTONE = 'MILESTONE',
+  ASSET = 'ASSET'
+}
+
+// Enum cho Payment Status
 export enum PaymentStatus {
-  Pending = 'Pending',
-  Completed = 'Completed',
-  Failed = 'Failed',
-  Refunded = 'Refunded'
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+  FAILED = 'FAILED'
 }
 
-// Enum cho TestRequest Status
-export enum TestRequestStatus {
-  Pending = 'Pending',
-  InProgress = 'In Progress',
-  Completed = 'Completed',
-  Cancelled = 'Cancelled'
+// Enum cho Delivery Status
+export enum DeliveryStatus {
+  READY = 'READY',
+  DOWNLOADED = 'DOWNLOADED'
 }
 
-// Interface cho Account
-export interface Account {
-  AccountID: number
+// Enum cho Marketplace Order Status
+export enum MarketplaceOrderStatus {
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+  DELIVERED = 'DELIVERED',
+  REFUNDED = 'REFUNDED'
+}
+
+// ==================== DATABASE INTERFACES ====================
+
+// Interface cho Role
+export interface Role {
+  RoleId: number
+  RoleName: string
+}
+
+// Interface cho Company
+export interface Company {
+  CompanyId: number
+  CompanyName: string
+  Address: string | null
+  Email: string | null
+  Phone: string | null
+  Website: string | null
+  CompanyType: CompanyType | null
+  Status: CompanyStatus
+  CreatedAt: Date
+  UpdatedAt: Date | null
+  IsDeleted: boolean
+}
+
+// Interface cho User
+export interface User {
+  UserId: number
+  CompanyId: number | null
+  RoleId: number
+  UserName: string
   Email: string
   PasswordHash: string
-  RoleID: number
+  Phone: string | null
+  CreatedAt: Date
+  UpdatedAt: Date | null
+  IsDeleted: boolean
+}
+
+// Interface cho Product
+export interface Product {
+  ProductId: number
+  CompanyId: number
+  ProductName: string
+  Description: string | null
+  Category: string | null
+  SizeInfo: string | null
+  ColorInfo: string | null
+  CreatedAt: Date
+  UpdatedAt: Date | null
+  IsDeleted: boolean
+}
+
+// Interface cho ServicePackage
+export interface ServicePackage {
+  PackageId: number
+  PackageName: string
+  Description: string | null
+  BasePrice: number | null
+  EstimatedDays: number | null
+}
+
+// Interface cho CreativeOrder
+export interface CreativeOrder {
+  OrderId: number
+  CompanyId: number
+  ProductId: number
+  PackageId: number
+  Brief: string | null
+  TargetPlatform: string | null
+  Status: CreativeOrderStatus
+  Deadline: Date | null
+  CreatedAt: Date
+  UpdatedAt: Date | null
+  IsDeleted: boolean
+}
+
+// Interface cho ProductionStage
+export interface ProductionStage {
+  StageId: number
+  OrderId: number
+  StageName: ProductionStageName
+  StageOrder: number
+  AssignedTo: number | null
+  StartDate: Date | null
+  EndDate: Date | null
+  Status: ProductionStageStatus
+}
+
+// Interface cho Asset3D
+export interface Asset3D {
+  AssetId: number
+  OrderId: number | null
+  AssetName: string
+  PreviewImage: string | null
+  CreatedBy: number
+  OwnerCompanyId: number | null
+  AssetType: AssetType | null
+  Price: number | null
+  IsMarketplace: boolean
+  Category: string | null
+  Industry: string | null
+  PublishStatus: AssetPublishStatus
+  CreatedAt: Date
+  UpdatedAt: Date | null
+  IsDeleted: boolean
+}
+
+// Interface cho AssetVersion
+export interface AssetVersion {
+  VersionId: number
+  AssetId: number
+  FileFormat: FileFormat
+  FileUrl: string | null
+  PolyCount: number | null
+  TextureSize: string | null
   CreatedAt: Date
 }
 
-// Interface cho UserProfile
-export interface UserProfile {
-  ProfileID: number
-  AccountID: number
-  FullName: string
-  Email: string
-  PhoneNumber: string
-  Address: string
-  DateOfBirth: Date
-  SignatureImage: string
+// Interface cho Payment
+export interface Payment {
+  PaymentId: number
+  OrderId: number | null
+  AssetId: number | null
+  CompanyId: number
+  Amount: number
+  PaymentType: PaymentType | null
+  PaymentStatus: PaymentStatus
+  PaymentDate: Date | null
+}
+
+// Interface cho Delivery
+export interface Delivery {
+  DeliveryId: number
+  OrderId: number
+  AssetId: number
+  DownloadUrl: string | null
+  DeliveredAt: Date | null
+  Status: DeliveryStatus | null
+}
+
+// Interface cho MarketplaceOrder
+export interface MarketplaceOrder {
+  MpOrderId: number
+  AssetId: number
+  BuyerCompanyId: number
+  SellerCompanyId: number
+  Price: number | null
+  Status: MarketplaceOrderStatus | null
   CreatedAt: Date
-  UpdatedAt: Date
 }
 
 // Interface cho RefreshToken
 export interface RefreshToken {
-  TokenID: number
-  AccountID: number
+  RefreshTokenId: number
+  UserId: number
   Token: string
   ExpiresAt: Date
   Revoked: boolean
   CreatedAt: Date
 }
 
-// // Interface cho Payment
-// export interface Payment {
-//   PaymentID: number
-//   RegistrationID: number
-//   Amount: number
-//   PaymentMethod: string
-//   PaymentStatus: PaymentStatus
-//   TransactionID: string | null
-//   PaymentDate: Date
-//   CreatedAt: Date
-//   UpdatedAt: Date
-// }
+// ==================== REQUEST/RESPONSE INTERFACES ====================
 
 // Interface cho LoginRequest
 export interface LoginRequest {
@@ -94,9 +271,12 @@ export interface LoginRequest {
 
 // Interface cho RegisterRequest
 export interface RegisterRequest {
+  UserName: string
   Email: string
-  Password: string
+  PasswordHash: string
   ConfirmPassword: string
+  Phone?: string
+  CompanyId?: number
 }
 
 // Interface cho ChangePasswordRequest
@@ -105,6 +285,16 @@ export interface ChangePasswordRequest {
   NewPassword: string
   ConfirmNewPassword: string
 }
+
+// ==================== UTILITY TYPES ====================
+
+export type PasswordActionResult = {
+  success: boolean
+  message: string
+}
+
+// ==================== LEGACY INTERFACES (for backward compatibility) ====================
+// These are kept for existing adminService and other old code
 
 interface Service {
   id: number
@@ -119,68 +309,6 @@ interface Service {
   updatedAt: Date
 }
 
-interface Payment {
-  id: number
-  userId: number
-  serviceId: number
-  amount: number
-  collectionMethod: string
-  appointmentDate?: Date
-  appointmentTime?: string
-  status: 'Pending' | 'Completed' | 'Failed' | 'Cancelled'
-  vnpayTransactionId?: string
-  vnpayResponseCode?: string
-  createdAt: Date
-  updatedAt: Date
-}
-
-interface TestRequest {
-  id: number
-  userId: number
-  serviceId: number
-  paymentId: number
-  collectionMethod: string
-  appointmentDate?: Date
-  appointmentTime?: string
-  status: string
-  assignedStaffId?: number
-  kitCode?: string
-  staffSignature?: string
-  approvedBy?: number
-  approvedAt?: Date
-  createdAt: Date
-  updatedAt: Date
-}
-
-interface SampleInformation {
-  id: number
-  testRequestId: number
-  fullName: string
-  birthYear: number
-  gender: 'Male' | 'Female'
-  relationship: string
-  sampleType: string
-  commitment: boolean
-  signatureImage?: string
-  createdAt: Date
-}
-
-interface TestResult {
-  id: number
-  testRequestId: number
-  results: string
-  enteredBy: number
-  enteredAt: Date
-}
-
-export interface User {
-  accountId: number
-  name: string
-  email: string
-  role: string
-  phoneNumber: string
-}
-
 interface DashboardStats {
   totalUsers: number
   totalTests: number
@@ -192,145 +320,5 @@ interface DashboardStats {
   feedback: number
   monthlyRevenue: number[]
   serviceDistribution: number[]
-  serviceNames: string[] // Add this to store service names
-}
-
-interface StaffDashboardStats {
-  totalRequests: number
-  pendingRequests: number
-  completedRequests: number
-  totalCustomers: number
-  completionRate: number
-}
-
-interface TestRequestDetail {
-  TestRequestID: number
-  AccountID: number
-  ServiceID: number
-  CollectionMethod: string
-  Appointment: string | null
-  Status: string
-  CreatedAt: string
-  UpdatedAt: string
-  AssignedTo: number | null
-  ServiceName: string
-  ServiceType: string
-  Price: number
-  SampleCount: number
-  CustomerName: string
-  CustomerEmail: string
-  CustomerPhone: string | null
-  CustomerAddress: string | null
-  TestSubjects: string
-  KitID: string | null
-  StaffName: string | null
-}
-
-interface RecentRequest {
-  TestRequestID: number
-  CustomerName: string
-  Status: string
-  CreatedAt: string
-}
-
-interface ManagerDashboardStats {
-  totalTests: number
-  revenue: number
-  avgRating: number
-  completed: number
-  pending: number
-  feedback: number
-  monthlyRevenue: number[]
-  serviceDistribution: number[]
-  serviceNames: string[] // Add this to store service names
-}
-
-export interface TestResultManage {
-  TestResultID: number
-  TestRequestID: number
-  CustomerName: string
-  CustomerEmail: string
-  CustomerPhone: string
-  CustomerAddress: string
-  ServiceName: string
-  ServiceType: string
-  SampleCount: number
-  TestSubjects: string
-  Status: string
-  Result: string
-  SampleDate: string
-  CreatedAt: string
-  ConfirmDate: string
-  StaffName: string
-  RegistrationDate: string
-}
-
-interface FeedbackManage {
-  FeedbackID: number
-  TestResultID: number
-  Rating: number
-  Comment: string
-  FullName: string
-  CreatedAt: string
-}
-
-interface BlogPostManage {
-  BlogID: number
-  Title: string
-  Content: string
-  Excerpt: string
-  Author: string
-  Category: string
-  ImageUrl?: string
-  Status: string
-  CreatedAt: string
-  UpdatedAt: string
-}
-
-export interface TestProcess {
-  TestRequestID: number
-  AccountID: number
-  ServiceID: number
-  ServiceName: string
-  ServiceType: 'Administrative' | 'Civil'
-  CollectionMethod: 'Home' | 'Facility'
-  Appointment: string
-  Status: string
-  AssignedTo?: number
-  CreatedAt: string
-  UpdatedAt: string
-  SampleCount: number
-  Price?: number
-  KitID?: string
-}
-
-
-export type PasswordActionResult = {
-  success: boolean
-  message: string
-}
-interface VerifiedResult {
-  TestResultID: number
-  TestRequestID: number
-  CustomerName: string
-  CustomerEmail: string
-  CustomerPhone: string
-  ServiceName: string
-  ServiceType: string
-  SampleCount: number
-  Result: string
-  StaffName: string
-  VerifiedDate: string
-  CreatedAt: string
-  KitID: string | null
-  CollectionMethod: string
-}
-
-interface VerifiedResultDetail extends VerifiedResult {
-  CustomerAddress: string
-  TestSubjects: string
-  SampleDate: string
-  EnterDate: string
-  ManagerName: string
-  RegistrationDate: string
+  serviceNames: string[]
 }

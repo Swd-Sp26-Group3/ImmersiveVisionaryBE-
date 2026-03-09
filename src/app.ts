@@ -7,6 +7,7 @@ import { connectToDatabase, createDefaultAdmin } from './config/database'
 
 import  authRoutes  from './routes/authRoutes'
 import { adminRoutes } from './routes/adminRoutes'
+import userRoutes from './routes/userRoutes'
 
 // Import routes
 
@@ -14,15 +15,7 @@ import { adminRoutes } from './routes/adminRoutes'
 const app = express()
 app.use(express.json())
 
-// // Create upload directories if they don't exist
-// const uploadDirs = ['uploads', 'uploads/signatures', 'uploads/documents']
-// uploadDirs.forEach((dir) => {
-//   if (!fs.existsSync(dir)) {
-//     fs.mkdirSync(dir, { recursive: true })
-//   }
-// })
 
-// Security middleware
 app.use(helmet())
 
 // Rate limiting
@@ -49,6 +42,7 @@ app.use(
 )
 app.use('/api/auth', authRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/users', userRoutes)
 
 // Initialize application
 export const initializeApp = async (): Promise<void> => {

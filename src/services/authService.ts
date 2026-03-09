@@ -10,6 +10,11 @@ export interface Payload {
   role: string
 }
 
+const REGISTERABLE_ROLES = ['ARTIST', 'CUSTOMER'] as const
+const COMPANY_APPROVAL_ROLES = ['ADMIN', 'MANAGER'] as const
+
+const normalizeRoleName = (role: string): string => role.trim().toUpperCase()
+
 // Thời gian hết hạn token
 const ACCESS_TOKEN_EXPIRES_IN = '1m'
 const REFRESH_TOKEN_EXPIRES_IN = 7 * 24 * 60 * 60 * 1000 // 7 ngày (ms)
@@ -19,6 +24,7 @@ export const register = async (
   UserName: string,
   Email: string,
   Password: string,
+  RoleName: string,
   Phone: string | null = null,
   CompanyId: number | null = null
 ) => {
@@ -47,13 +53,18 @@ export const register = async (
     throw new Error('Email đã tồn tại')
   }
 
-  // Lấy RoleId cho "CUSTOMER" (default role)
-  const roleRes = await pool.request().input('name', 'CUSTOMER').query(`
+  const normalizedRoleName = normalizeRoleName(RoleName)
+  if (!REGISTERABLE_ROLES.includes(normalizedRoleName as (typeof REGISTERABLE_ROLES)[number])) {
+    throw new Error('Role không hợp lệ. Chỉ được chọn ARTIST hoặc CUSTOMER')
+  }
+
+  // Lấy RoleId theo role người dùng chọn khi đăng ký
+  const roleRes = await pool.request().input('name', normalizedRoleName).query(`
     SELECT RoleId FROM [Role] WHERE RoleName = @name
   `)
 
   if (roleRes.recordset.length === 0) {
-    throw new Error('Role CUSTOMER không tồn tại')
+    throw new Error(`Role ${normalizedRoleName} không tồn tại`)
   }
 
   const roleId = roleRes.recordset[0].RoleId
@@ -87,7 +98,10 @@ export const register = async (
 
   // Lấy lại user vừa tạo
   const newUser = await pool.request().input('email', Email).query(`
-    SELECT UserId, UserName, Email, Phone, CompanyId FROM [User] WHERE Email = @email
+    SELECT u.UserId, u.UserName, u.Email, u.Phone, u.CompanyId, r.RoleName
+    FROM [User] u
+    INNER JOIN [Role] r ON r.RoleId = u.RoleId
+    WHERE u.Email = @email
   `)
 
   return newUser.recordset[0]
@@ -98,9 +112,10 @@ export const login = async (email: string, password: string) => {
   const pool = await getDbPool()
 
   const result = await pool.request().input('email', email).query(`
-    SELECT u.UserId, u.Email, u.PasswordHash, u.RoleId, r.RoleName
+    SELECT u.UserId, u.Email, u.PasswordHash, u.RoleId, r.RoleName, c.Email AS CompanyEmail
     FROM [User] u
     INNER JOIN [Role] r ON u.RoleId = r.RoleId
+    LEFT JOIN [Company] c ON c.CompanyId = u.CompanyId
     WHERE u.Email = @email
   `)
 
@@ -111,10 +126,24 @@ export const login = async (email: string, password: string) => {
   const valid = await bcrypt.compare(password, user.PasswordHash)
   if (!valid) return null
 
+  const normalizedRole = normalizeRoleName(user.RoleName)
+  if (COMPANY_APPROVAL_ROLES.includes(normalizedRole as (typeof COMPANY_APPROVAL_ROLES)[number])) {
+    const loginEmail = String(email).trim().toLowerCase()
+    const companyEmail = String(user.CompanyEmail || '').trim().toLowerCase()
+
+    if (!companyEmail) {
+      throw new Error('Tài khoản ADMIN/MANAGER chưa được gán email công ty để phê duyệt')
+    }
+
+    if (loginEmail !== companyEmail) {
+      throw new Error('Email đăng nhập không khớp email công ty đã cấu hình')
+    }
+  }
+
   const payload: Payload = {
     userId: user.UserId,
     email: user.Email,
-    role: user.RoleName
+    role: normalizedRole
   }
 
   const accessToken = generateAccessToken(payload)

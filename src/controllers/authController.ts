@@ -12,11 +12,17 @@ import {
 import { getDbPool } from '../config/database'
 
 export const registerHandler = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { UserName, Email, PasswordHash, ConfirmPassword, Phone, CompanyId } = req.body
+  const { UserName, Email, PasswordHash, ConfirmPassword, Phone, CompanyId, Role, role } = req.body
+  const selectedRole = (Role || role || '').toString().trim().toUpperCase()
  
   // Kiểm tra các tham số đầu vào bắt buộc
-  if (!UserName || !Email || !PasswordHash || !ConfirmPassword) {
-    res.status(400).json({ message: 'UserName, Email, PasswordHash, và ConfirmPassword là bắt buộc' })
+  if (!UserName || !Email || !PasswordHash || !ConfirmPassword || !selectedRole) {
+    res.status(400).json({ message: 'UserName, Email, PasswordHash, ConfirmPassword và Role là bắt buộc' })
+    return
+  }
+
+  if (!['ARTIST', 'CUSTOMER'].includes(selectedRole)) {
+    res.status(400).json({ message: 'Role chỉ được chọn ARTIST hoặc CUSTOMER' })
     return
   }
 
@@ -45,6 +51,7 @@ export const registerHandler = async (req: AuthRequest, res: Response): Promise<
       UserName,
       Email,
       PasswordHash,
+      selectedRole,
       Phone || null,
       CompanyId || null
     )
@@ -55,7 +62,8 @@ export const registerHandler = async (req: AuthRequest, res: Response): Promise<
       user: {
         userId: user.UserId,
         userName: user.UserName,
-        email: user.Email
+        email: user.Email,
+        role: user.RoleName
       }
     })
   } catch (error: unknown) {
@@ -94,7 +102,10 @@ export const loginHandler = async (req: AuthRequest, res: Response): Promise<voi
     })
   } catch (error: unknown) {
     if (error instanceof Error) {
-      console.log(Error)
+      if (error.message.includes('không khớp email công ty') || error.message.includes('phê duyệt')) {
+        res.status(403).json({ message: error.message })
+        return
+      }
 
       res.status(500).json({ message: error.message })
     } else {

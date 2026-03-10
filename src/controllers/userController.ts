@@ -10,10 +10,9 @@ import {
   approveBusinessAccount
 } from '../services/userService'
 
-// Handler: Lấy thông tin profile của user đang đăng nhập
 export const getProfileHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // req.user được set bởi authenticate middleware
+
     if (!req.user) {
       res.status(401).json({ message: 'Unauthorized' })
       return
@@ -37,7 +36,6 @@ export const getProfileHandler = async (req: AuthRequest, res: Response): Promis
   }
 }
 
-// Handler: Cập nhật profile của user đang đăng nhập
 export const updateProfileHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
@@ -54,7 +52,6 @@ export const updateProfileHandler = async (req: AuthRequest, res: Response): Pro
       return
     }
 
-    // Kiểm tra định dạng email nếu có
     if (Email) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(Email)) {
@@ -76,7 +73,6 @@ export const updateProfileHandler = async (req: AuthRequest, res: Response): Pro
   } catch (error: any) {
     console.error('Error in updateProfileHandler:', error)
     
-    // Xử lý các lỗi cụ thể từ service
     if (error.message === 'Email đã được sử dụng bởi user khác') {
       res.status(409).json({ message: error.message })
       return
@@ -96,32 +92,13 @@ export const updateProfileHandler = async (req: AuthRequest, res: Response): Pro
   }
 }
 
-// Handler: Lấy thông tin user theo ID
-// Chỉ cho phép ADMIN, MANAGER xem thông tin user khác
-// User thường chỉ xem được thông tin của chính mình
 export const getUserByIdHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user) {
-      res.status(401).json({ message: 'Unauthorized' })
-      return
-    }
-
     const targetUserId = parseInt(req.params.id, 10)
 
     if (isNaN(targetUserId)) {
       res.status(400).json({ message: 'User ID không hợp lệ' })
       return
-    }
-
-    const currentUserId = req.user.userId
-    const currentUserRole = req.user.roleName
-
-    // Nếu không phải ADMIN hoặc MANAGER, chỉ cho phép xem thông tin của chính mình
-    if (currentUserRole !== 'ADMIN' && currentUserRole !== 'MANAGER') {
-      if (currentUserId !== targetUserId) {
-        res.status(403).json({ message: 'Bạn không có quyền xem thông tin user này' })
-        return
-      }
     }
 
     const user = await getUserById(targetUserId)
@@ -216,7 +193,6 @@ const update = async (req: AuthRequest, res: Response): Promise<void> => {
       }
     }
 
-    // Owner hoặc ADMIN/MANAGER được phép update
     const isPrivilegedRole = req.user.roleName === 'ADMIN' || req.user.roleName === 'MANAGER'
     const isOwner = req.user.userId === targetUserId
     if (!isPrivilegedRole && !isOwner) {
@@ -319,9 +295,11 @@ const approve = async (req: AuthRequest, res: Response): Promise<void> => {
   }
 }
 
-const userController = {
+export const userController = {
+  getProfile: getProfileHandler,
+  updateProfile: updateProfileHandler,
+  getById: getUserByIdHandler,
   getAll,
-  getById,
   update,
   delete: deleteUser,
   approve

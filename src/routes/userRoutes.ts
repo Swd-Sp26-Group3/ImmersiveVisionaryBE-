@@ -1,20 +1,13 @@
 import { Router } from 'express'
-import {
-	getProfileHandler,
-	updateProfileHandler,
-	getUserByIdHandler
-} from '../controllers/userController'
-import { authenticate } from '../middlewares/authMiddleware'
+import { userController } from '../controllers/userController'
+import { authenticate, authorize } from '../middlewares/authMiddleware'
 
 const router = Router()
 
-// GET /users/profile
-router.get('/profile', authenticate, getProfileHandler)
+router.get('/profile', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTOMER', 'SELLER']), userController.getProfile)
 
-// PUT /users/profile
-router.put('/profile', authenticate, updateProfileHandler)
+router.put('/profile', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTOMER', 'SELLER']), userController.updateProfile)
 
-// GET /users/:id
-router.get('/:id', authenticate, getUserByIdHandler)
+router.get('/:id', authenticate, authorize(['ADMIN', 'MANAGER']), userController.getById)
 
 export default router

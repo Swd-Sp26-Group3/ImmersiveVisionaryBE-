@@ -8,6 +8,7 @@ import { connectToDatabase, createDefaultAdmin } from './config/database'
 import  authRoutes  from './routes/authRoutes'
 import { adminRoutes } from './routes/adminRoutes'
 import userRoutes from './routes/userRoutes'
+import companyRoutes from './routes/companyRoutes'
 
 // Import routes
 
@@ -43,6 +44,7 @@ app.use(
 app.use('/api/auth', authRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/users', userRoutes)
+app.use('/api/companies', companyRoutes)
 
 // Initialize application
 export const initializeApp = async (): Promise<void> => {

@@ -11,6 +11,5 @@ router.use(authorize(['Admin']))
 // Dashboard
 router.get('/dashboard', authenticate, adminController.getDashboardStats)
 
-// User Management
 
 export { router as adminRoutes }

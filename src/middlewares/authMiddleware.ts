@@ -7,11 +7,17 @@ export type Role = 'ADMIN' | 'MANAGER' | 'ARTIST' | 'CUSTOMER' | 'SELLER'
 export interface AuthUser {
   userId: number
   email: string
-  roleName: Role
+  roleName: Role | string
 }
 
-// Extend Request interface để thêm user property
-
+interface DecodedToken {
+  userId?: number
+  email?: string
+  roleName?: string
+  role?: string
+  RoleName?: string
+  [key: string]: unknown
+}
 
 export interface AuthRequest extends Request {
   user?: AuthUser
@@ -25,7 +31,6 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
     return
   }
 
-  // Kiểm tra token có phải là dạng "Bearer <token>"
   const token = authHeader.split(' ')[1]
   if (!token) {
     res.status(401).json({ message: 'Token is missing in the Authorization header' })
@@ -33,10 +38,23 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
   }
 
   try {
-    // Giải mã token và gán vào req.user
-    const payload = jwt.verify(token, config.jwt.secret) as AuthUser
-    req.user = payload
-    next() // Chuyển tiếp đến middleware tiếp theo
+
+    const payload = jwt.verify(token, config.jwt.secret) as DecodedToken
+
+    if (!payload.userId || !payload.email) {
+      res.status(401).json({ message: 'Invalid token payload' })
+      return
+    }
+
+    const resolvedRole = payload.roleName || payload.role || payload.RoleName
+
+    req.user = {
+      userId: payload.userId,
+      email: payload.email,
+      roleName: resolvedRole || ''
+    }
+
+    next() 
   } catch (error) {
     res.status(401).json({ message: 'Invalid or expired token' })
   }
@@ -51,8 +69,14 @@ export const authorize = (allowedRoles: string[]) => {
       return
     }
 
+    const userRoleRaw = user.roleName
+    if (typeof userRoleRaw !== 'string' || userRoleRaw.trim() === '') {
+      res.status(401).json({ message: 'Unauthorized: Missing role in token' })
+      return
+    }
+
     // Convert role to lowercase for case-insensitive comparison
-    const userRole = user.roleName.toLowerCase()
+    const userRole = userRoleRaw.toLowerCase()
     const normalizedAllowedRoles = allowedRoles.map((role) => role.toLowerCase())
 
     if (!normalizedAllowedRoles.includes(userRole)) {

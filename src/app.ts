@@ -10,6 +10,7 @@ import { adminRoutes } from './routes/adminRoutes'
 import userRoutes from './routes/userRoutes'
 import companyRoutes from './routes/companyRoutes'
 import productRoutes from './routes/productRoutes'
+import packageRoutes from './routes/packageRoutes'
 
 // Import routes
 
@@ -47,6 +48,7 @@ app.use('/api/admin', adminRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/companies', companyRoutes)
 app.use('/api/products', productRoutes)
+app.use('/api/packages', packageRoutes)
 
 // Initialize application
 export const initializeApp = async (): Promise<void> => {

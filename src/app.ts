@@ -13,6 +13,7 @@ import productRoutes from './routes/productRoutes'
 import packageRoutes from './routes/packageRoutes'
 import orderRoutes from './routes/orderRoutes'
 import assetRoutes from './routes/assetRoutes'
+import assetVersionRoutes from './routes/assetVersionRoutes'
 
 // Import routes
 
@@ -53,6 +54,7 @@ app.use('/api/products', productRoutes)
 app.use('/api/packages', packageRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/assets', assetRoutes)
+app.use('/api/asset-versions', assetVersionRoutes)
 
 // Initialize application
 export const initializeApp = async (): Promise<void> => {

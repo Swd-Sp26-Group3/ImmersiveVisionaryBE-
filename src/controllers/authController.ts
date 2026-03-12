@@ -6,34 +6,29 @@ import {
   verifyRefreshToken,
   generateAccessToken,
   PasswordChange
-  // forgotPassword,
-  // resetPassword
+
 } from '../services/authService'
 import { getDbPool } from '../config/database'
 
 export const registerHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   const { UserName, Email, PasswordHash, ConfirmPassword, Phone, CompanyId } = req.body
- 
-  // Kiểm tra các tham số đầu vào bắt buộc
+
   if (!UserName || !Email || !PasswordHash || !ConfirmPassword) {
     res.status(400).json({ message: 'UserName, Email, PasswordHash, và ConfirmPassword là bắt buộc' })
     return
   }
 
-  // Kiểm tra độ dài mật khẩu
   const passwordRegex = /^.{6,12}$/
   if (!passwordRegex.test(PasswordHash)) {
     res.status(400).json({ message: 'Mật khẩu phải có độ dài từ 6 đến 12 ký tự' })
     return
   }
 
-  // Kiểm tra mật khẩu xác nhận
   if (PasswordHash !== ConfirmPassword) {
     res.status(400).json({ message: 'Mật khẩu không trùng khớp' })
     return
   }
 
-  // Kiểm tra định dạng email
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   if (!emailRegex.test(Email)) {
     res.status(400).json({ message: 'Email không hợp lệ' })
@@ -111,7 +106,6 @@ export const PasswordChangeHandler = async (req: AuthRequest, res: Response): Pr
   }
   const { password, NewPassword, confirmNewPassword } = req.body
 
-  // Kiểm tra mật khẩu cũ và mật khẩu mới
   if (!password) {
     res.status(400).json({ message: 'Mật khẩu cũ là bắt buộc' })
     return
@@ -151,7 +145,6 @@ export const refreshAccessTokenHandler = async (req: Request, res: Response): Pr
       return
     }
 
-    // Đảm bảo bạn truyền đầy đủ thông tin trong payload
     const newAccessToken = generateAccessToken({
       userId: payload.userId,
       email: payload.email,
@@ -168,7 +161,6 @@ export const refreshAccessTokenHandler = async (req: Request, res: Response): Pr
   }
 }
 
-// Add the missing getCurrentUserInfo endpoint
 export const getCurrentUserInfo = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = req.user
@@ -177,7 +169,6 @@ export const getCurrentUserInfo = async (req: AuthRequest, res: Response): Promi
       return
     }
 
-    // Get additional user information from database if needed
     const pool = await getDbPool()
     const result = await pool.request().input('userId', user.userId).query(`
     SELECT 
@@ -209,12 +200,10 @@ export const getCurrentUserInfo = async (req: AuthRequest, res: Response): Promi
   }
 }
 
-// Add logout handler
 export const logoutHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const id = req.user?.userId
 
-    // Revoke the refresh token in the database
     const pool = await getDbPool()
     await pool.request().input('id', id).query(`
         DELETE FROM RefreshToken WHERE UserId = @id

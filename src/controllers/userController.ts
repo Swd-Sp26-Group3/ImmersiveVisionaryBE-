@@ -286,7 +286,7 @@ const approve = async (req: AuthRequest, res: Response): Promise<void> => {
       return
     }
 
-    if (error.message === 'Role SELLER không tồn tại') {
+    if (error.message === 'Role ARTIST không tồn tại') {
       res.status(400).json({ message: error.message })
       return
     }

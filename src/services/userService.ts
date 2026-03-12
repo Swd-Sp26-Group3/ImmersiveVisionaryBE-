@@ -206,24 +206,24 @@ export const softDeleteUser = async (userId: number): Promise<void> => {
   }
 }
 
-// Approve business account: đổi role sang SELLER
+// Approve business account: đổi role sang ARTIST
 export const approveBusinessAccount = async (userId: number): Promise<UserProfile | null> => {
   const pool = await getDbPool()
 
-  const roleResult = await pool.request().input('roleName', 'SELLER').query(`
+  const roleResult = await pool.request().input('roleName', 'ARTIST').query(`
     SELECT RoleId FROM [Role] WHERE RoleName = @roleName
   `)
 
   if (roleResult.recordset.length === 0) {
-    throw new Error('Role SELLER không tồn tại')
+    throw new Error('Role ARTIST không tồn tại')
   }
 
-  const sellerRoleId = roleResult.recordset[0].RoleId
+  const artistRoleId = roleResult.recordset[0].RoleId
 
   const updateResult = await pool
     .request()
     .input('userId', userId)
-    .input('roleId', sellerRoleId)
+    .input('roleId', artistRoleId)
     .input('updatedAt', new Date())
     .query(`
       UPDATE [User]

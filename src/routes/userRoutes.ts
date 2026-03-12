@@ -4,9 +4,9 @@ import { authenticate, authorize } from '../middlewares/authMiddleware'
 
 const router = Router()
 
-router.get('/profile', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTOMER', 'SELLER']), userController.getProfile)
+router.get('/profile', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTOMER']), userController.getProfile)
 
-router.put('/profile', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTOMER', 'SELLER']), userController.updateProfile)
+router.put('/profile', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTOMER']), userController.updateProfile)
 
 router.get('/:id', authenticate, authorize(['ADMIN', 'MANAGER']), userController.getById)
 

@@ -8,7 +8,7 @@ import {
   type CompanyType
 } from '../services/companyService'
 
-const ALLOWED_COMPANY_TYPES: CompanyType[] = ['BRAND', 'AGENCY', 'STUDIO', 'SELLER']
+const ALLOWED_COMPANY_TYPES: CompanyType[] = ['BRAND', 'AGENCY', 'STUDIO']
 const ALLOWED_STATUS: CompanyStatus[] = ['ACTIVE', 'INACTIVE', 'SUSPENDED']
 
 const isValidEmail = (email: string): boolean => {

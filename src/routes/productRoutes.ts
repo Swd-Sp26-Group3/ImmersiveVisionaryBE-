@@ -7,7 +7,7 @@ const router = Router()
 router.post('/', authenticate, authorize(['ADMIN', 'MANAGER', 'SELLER']), productController.create)
 router.put('/:id', authenticate, authorize(['ADMIN', 'MANAGER', 'SELLER']), productController.update)
 router.delete('/:id', authenticate, authorize(['ADMIN', 'MANAGER', 'SELLER']), productController.delete)
-router.get('/:id', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTOMER', 'SELLER']), productController.getById)
-router.get('/', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTOMER', 'SELLER']), productController.list)
+router.get('/:id', productController.getById)
+router.get('/', productController.list)
 
 export default router

@@ -14,6 +14,7 @@ import packageRoutes from './routes/packageRoutes'
 import orderRoutes from './routes/orderRoutes'
 import assetRoutes from './routes/assetRoutes'
 import assetVersionRoutes from './routes/assetVersionRoutes'
+import paymentRoutes from './routes/paymentRoutes'
 
 // Import routes
 
@@ -55,6 +56,7 @@ app.use('/api/packages', packageRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/assets', assetRoutes)
 app.use('/api/asset-versions', assetVersionRoutes)
+app.use('/api/payments', paymentRoutes)
 
 // Initialize application
 export const initializeApp = async (): Promise<void> => {

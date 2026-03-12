@@ -15,6 +15,7 @@ import orderRoutes from './routes/orderRoutes'
 import assetRoutes from './routes/assetRoutes'
 import assetVersionRoutes from './routes/assetVersionRoutes'
 import paymentRoutes from './routes/paymentRoutes'
+import marketplaceOrderRoutes from './routes/marketplaceOrderRoutes'
 
 // Import routes
 
@@ -57,6 +58,7 @@ app.use('/api/orders', orderRoutes)
 app.use('/api/assets', assetRoutes)
 app.use('/api/asset-versions', assetVersionRoutes)
 app.use('/api/payments', paymentRoutes)
+app.use('/api/mp-orders', marketplaceOrderRoutes)
 
 // Initialize application
 export const initializeApp = async (): Promise<void> => {

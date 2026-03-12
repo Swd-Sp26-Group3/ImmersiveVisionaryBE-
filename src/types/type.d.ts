@@ -12,7 +12,8 @@ export enum RoleName {
 export enum CompanyType {
   BRAND = 'BRAND',
   AGENCY = 'AGENCY',
-  STUDIO = 'STUDIO'
+  STUDIO = 'STUDIO',
+  SELLER = 'SELLER'
 }
 
 // Enum cho Company Status

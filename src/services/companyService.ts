@@ -1,7 +1,7 @@
 import sql from 'mssql'
 import { getDbPool } from '../config/database'
 
-export type CompanyType = 'BRAND' | 'AGENCY' | 'STUDIO'
+export type CompanyType = 'BRAND' | 'AGENCY' | 'STUDIO' | 'SELLER'
 export type CompanyStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
 
 export interface Company {

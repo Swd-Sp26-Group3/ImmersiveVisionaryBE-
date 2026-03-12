@@ -11,6 +11,7 @@ import userRoutes from './routes/userRoutes'
 import companyRoutes from './routes/companyRoutes'
 import productRoutes from './routes/productRoutes'
 import packageRoutes from './routes/packageRoutes'
+import orderRoutes from './routes/orderRoutes'
 
 // Import routes
 
@@ -49,6 +50,7 @@ app.use('/api/users', userRoutes)
 app.use('/api/companies', companyRoutes)
 app.use('/api/products', productRoutes)
 app.use('/api/packages', packageRoutes)
+app.use('/api/orders', orderRoutes)
 
 // Initialize application
 export const initializeApp = async (): Promise<void> => {

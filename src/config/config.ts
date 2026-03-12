@@ -18,7 +18,7 @@ export const config = {
   jwt: {
     secret: process.env.JWT_SECRET || 'hackhocai',
     refreshSecret: process.env.JWT_REFRESH_SECRET || 'hackhocai',
-    expiresIn: process.env.JWT_EXPIRES_IN || '15m',
+    expiresIn: process.env.JWT_EXPIRES_IN || '1h',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
   },
 

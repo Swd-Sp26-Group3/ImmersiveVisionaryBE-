@@ -19,6 +19,7 @@ export interface UpdateProfileData {
   UserName?: string
   Email?: string
   Phone?: string | null
+  CompanyId?: number | null
 }
 
 export interface UserListItem {
@@ -111,6 +112,14 @@ export const updateUserProfile = async (
     }
   }
 
+  // Kiểm tra CompanyId tồn tại (chỉ khi assign, không check khi null)
+  if (updateData.CompanyId !== undefined && updateData.CompanyId !== null) {
+    const companyExists = await pool.request()
+      .input('companyId', updateData.CompanyId)
+      .query(`SELECT CompanyId FROM [Company] WHERE CompanyId = @companyId`)
+    if (companyExists.recordset.length === 0) throw new Error('Company không tồn tại')
+  }
+
   // Build dynamic update query
   const updateFields: string[] = []
   const request = pool.request().input('userId', userId).input('updatedAt', new Date())
@@ -130,6 +139,11 @@ export const updateUserProfile = async (
     request.input('phone', updateData.Phone)
   }
 
+  if (updateData.CompanyId !== undefined) {
+    updateFields.push('CompanyId = @companyId')
+    request.input('companyId', updateData.CompanyId)
+  }
+  
   if (updateFields.length === 0) {
     throw new Error('Không có thông tin nào để cập nhật')
   }

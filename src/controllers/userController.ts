@@ -178,10 +178,10 @@ const update = async (req: AuthRequest, res: Response): Promise<void> => {
       return
     }
 
-    const { UserName, Email, Phone } = req.body
+    const { UserName, Email, Phone, CompanyId } = req.body
 
-    if (!UserName && !Email && Phone === undefined) {
-      res.status(400).json({ message: 'Cần ít nhất một trường để cập nhật (UserName, Email, hoặc Phone)' })
+    if (!UserName && !Email && Phone === undefined && CompanyId === undefined) {
+      res.status(400).json({ message: 'Cần ít nhất một trường để cập nhật' })
       return
     }
 
@@ -193,6 +193,13 @@ const update = async (req: AuthRequest, res: Response): Promise<void> => {
       }
     }
 
+    if (CompanyId !== undefined && CompanyId !== null) {
+      if (!Number.isInteger(CompanyId) || CompanyId <= 0) {
+        res.status(400).json({ message: 'CompanyId phải là số nguyên dương hoặc null' })
+        return
+      }
+    }
+
     const isPrivilegedRole = req.user.roleName === 'ADMIN' || req.user.roleName === 'MANAGER'
     const isOwner = req.user.userId === targetUserId
     if (!isPrivilegedRole && !isOwner) {
@@ -200,7 +207,7 @@ const update = async (req: AuthRequest, res: Response): Promise<void> => {
       return
     }
 
-    const updatedUser = await updateUserById(targetUserId, { UserName, Email, Phone })
+    const updatedUser = await updateUserById(targetUserId, { UserName, Email, Phone, CompanyId })
 
     res.status(200).json({
       message: 'Cập nhật user thành công',

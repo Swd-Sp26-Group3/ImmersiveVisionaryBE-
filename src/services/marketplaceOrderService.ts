@@ -7,10 +7,13 @@ export interface MarketplaceOrder {
   MpOrderId: number
   AssetId: number
   BuyerCompanyId: number
-  ProviderCompanyId: number
+  SellerCompanyId: number
   Price: number | null
   Status: MarketplaceOrderStatus | null
   CreatedAt: Date
+  AssetName?: string | null
+  BuyerCompanyName?: string | null
+  SellerCompanyName?: string | null
 }
 
 export interface CreateMarketplaceOrderInput {
@@ -103,13 +106,13 @@ export const createMarketplaceOrder = async (
     .request()
     .input('AssetId', sql.Int, payload.AssetId)
     .input('BuyerCompanyId', sql.Int, buyerCompanyId)
-    .input('ProviderCompanyId', sql.Int, asset.OwnerCompanyId)
+    .input('SellerCompanyId', sql.Int, asset.OwnerCompanyId)
     .input('Price', sql.Decimal(18, 2), asset.Price)
     .input('Status', sql.NVarChar(50), 'PENDING')
     .query(`
-      INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, ProviderCompanyId, Price, Status)
+      INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, SellerCompanyId, Price, Status)
       OUTPUT INSERTED.*
-      VALUES (@AssetId, @BuyerCompanyId, @ProviderCompanyId, @Price, @Status)
+      VALUES (@AssetId, @BuyerCompanyId, @SellerCompanyId, @Price, @Status)
     `)
 
   return result.recordset[0]
@@ -134,6 +137,29 @@ export const listMyPurchases = async (userId: number): Promise<MarketplaceOrder[
       ORDER BY MpOrderId DESC
     `)
 
+  return result.recordset
+}
+
+export const listAllMarketplaceOrders = async (): Promise<MarketplaceOrder[]> => {
+  const pool = await getDbPool()
+  const result = await pool.request().query(`
+    SELECT
+      mo.MpOrderId,
+      mo.AssetId,
+      mo.BuyerCompanyId,
+      mo.SellerCompanyId,
+      mo.Price,
+      mo.Status,
+      mo.CreatedAt,
+      a.AssetName,
+      bc.CompanyName AS BuyerCompanyName,
+      sc.CompanyName AS SellerCompanyName
+    FROM [MarketplaceOrder] mo
+    LEFT JOIN Asset3D  a   ON mo.AssetId         = a.AssetId
+    LEFT JOIN Company  bc  ON mo.BuyerCompanyId  = bc.CompanyId
+    LEFT JOIN Company  sc  ON mo.SellerCompanyId = sc.CompanyId
+    ORDER BY mo.CreatedAt DESC
+  `)
   return result.recordset
 }
 

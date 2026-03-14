@@ -3,6 +3,7 @@ import type { AuthRequest } from '../middlewares/authMiddleware'
 import {
   createMarketplaceOrder,
   getMarketplaceOrderDetail,
+  listAllMarketplaceOrders,
   listMyPurchases,
   refundMarketplaceOrder
 } from '../services/marketplaceOrderService'
@@ -96,6 +97,17 @@ export const listMyPurchasesHandler = async (req: AuthRequest, res: Response): P
   }
 }
 
+export const listAllMarketplaceOrdersHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ message: 'Unauthorized' }); return }
+    const orders = await listAllMarketplaceOrders()
+    res.status(200).json({ message: 'Get all marketplace orders successfully', data: orders })
+  } catch (error: any) {
+    console.error('Error in listAllMarketplaceOrdersHandler:', error)
+    res.status(500).json({ message: 'Server error while getting marketplace orders' })
+  }
+}
+
 export const getMarketplaceOrderDetailHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
@@ -165,6 +177,7 @@ export const refundMarketplaceOrderHandler = async (req: AuthRequest, res: Respo
 export const marketplaceOrderController = {
   create: createMarketplaceOrderHandler,
   listMy: listMyPurchasesHandler,
+  listAll: listAllMarketplaceOrdersHandler,
   getById: getMarketplaceOrderDetailHandler,
   refund: refundMarketplaceOrderHandler
 }

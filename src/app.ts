@@ -58,7 +58,7 @@ app.use('/api/orders', orderRoutes)
 app.use('/api/assets', assetRoutes)
 app.use('/api/asset-versions', assetVersionRoutes)
 app.use('/api/payments', paymentRoutes)
-app.use('/api/mp-orders', marketplaceOrderRoutes)
+app.use('/api/marketplace-orders', marketplaceOrderRoutes)
 
 // Initialize application
 export const initializeApp = async (): Promise<void> => {

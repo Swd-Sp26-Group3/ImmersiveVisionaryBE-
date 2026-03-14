@@ -4,8 +4,7 @@ import { assetController } from '../controllers/assetController'
 
 const router = Router()
 
-router.get('/marketplace', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTOMER']), assetController.listMarketplace)
-
+router.get('/marketplace', assetController.listMarketplace)
 router.post('/', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST']), assetController.create)
 router.get('/:id', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTOMER']), assetController.getById)
 router.put('/:id', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST']), assetController.update)

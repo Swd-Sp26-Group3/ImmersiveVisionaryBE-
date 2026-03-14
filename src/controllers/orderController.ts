@@ -4,6 +4,7 @@ import {
   createOrder,
   getOrderDetailForUser,
   listMyOrders,
+  listOrdersForArtist,
   listOrdersForManager,
   updateOrderStatus,
   cancelOrderForCustomer,
@@ -180,25 +181,20 @@ export const getOrderDetailHandler = async (req: AuthRequest, res: Response): Pr
 
 export const listMyOrdersHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user) {
-      res.status(401).json({ message: 'Unauthorized' })
-      return
-    }
-
-    const orders = await listMyOrders(req.user.userId)
-
-    res.status(200).json({
-      message: 'Get my orders successfully',
-      data: orders
-    })
+    if (!req.user) { res.status(401).json({ message: 'Unauthorized' }); return }
+ 
+    const normalizedRole = req.user.roleName?.toUpperCase()
+ 
+    const orders = normalizedRole === 'ARTIST'
+      ? await listOrdersForArtist(req.user.userId)
+      : await listMyOrders(req.user.userId)
+ 
+    res.status(200).json({ message: 'Get my orders successfully', data: orders })
   } catch (error: any) {
     console.error('Error in listMyOrdersHandler:', error)
-
     if (error.message === 'USER_COMPANY_NOT_FOUND') {
-      res.status(400).json({ message: 'User is not associated with any company' })
-      return
+      res.status(400).json({ message: 'User is not associated with any company' }); return
     }
-
     res.status(500).json({ message: 'Server error while getting my orders' })
   }
 }

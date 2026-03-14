@@ -151,6 +151,44 @@ export const getOrderDetailForUser = async (
   return order
 }
 
+export const listOrdersForArtist = async (userId: number): Promise<CreativeOrderDetail[]> => {
+  const pool = await getDbPool()
+  // Lấy orders có ProductionStage assign cho artist này
+  const assignedResult = await pool.request().input('UserId', sql.Int, userId).query(`
+    SELECT DISTINCT
+      o.OrderId, o.CompanyId, o.ProductId, o.PackageId, o.Brief, o.TargetPlatform,
+      o.Status, o.Deadline, o.CreatedAt, o.UpdatedAt, o.IsDeleted,
+      c.CompanyName, p.ProductName, sp.PackageName
+    FROM [CreativeOrder] o
+    INNER JOIN [ProductionStage] ps ON o.OrderId = ps.OrderId AND ps.AssignedTo = @UserId
+    LEFT JOIN [Company] c      ON o.CompanyId = c.CompanyId
+    LEFT JOIN [Product] p      ON o.ProductId = p.ProductId
+    LEFT JOIN [ServicePackage] sp ON o.PackageId = sp.PackageId
+    WHERE o.IsDeleted = 0
+    ORDER BY o.CreatedAt DESC
+  `)
+ 
+  if (assignedResult.recordset.length > 0) {
+    return assignedResult.recordset
+  }
+ 
+  const fallbackResult = await pool.request().query(`
+    SELECT
+      o.OrderId, o.CompanyId, o.ProductId, o.PackageId, o.Brief, o.TargetPlatform,
+      o.Status, o.Deadline, o.CreatedAt, o.UpdatedAt, o.IsDeleted,
+      c.CompanyName, p.ProductName, sp.PackageName
+    FROM [CreativeOrder] o
+    LEFT JOIN [Company] c      ON o.CompanyId = c.CompanyId
+    LEFT JOIN [Product] p      ON o.ProductId = p.ProductId
+    LEFT JOIN [ServicePackage] sp ON o.PackageId = sp.PackageId
+    WHERE o.IsDeleted = 0
+      AND o.Status NOT IN ('COMPLETED', 'DELIVERED', 'CANCELLED')
+    ORDER BY o.CreatedAt DESC
+  `)
+ 
+  return fallbackResult.recordset
+}
+
 export const listMyOrders = async (userId: number): Promise<CreativeOrderDetail[]> => {
   const companyId = await getUserCompanyId(userId)
 

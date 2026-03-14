@@ -111,6 +111,35 @@ export const getAssetById = async (assetId: number): Promise<Asset3D | null> => 
   return result.recordset[0]
 }
 
+// Publish pending or draft on Artist page
+export const listMyAssets = async (createdBy: number): Promise<Asset3D[]> => {
+  const pool = await getDbPool()
+ 
+  const result = await pool
+    .request()
+    .input('CreatedBy', sql.Int, createdBy)
+    .query(`
+      SELECT *
+      FROM [Asset3D]
+      WHERE CreatedBy = @CreatedBy AND IsDeleted = 0
+      ORDER BY CreatedAt DESC
+    `)
+ 
+  return result.recordset
+}
+
+export const listAllAssets = async (): Promise<Asset3D[]> => {
+  const pool = await getDbPool()
+ 
+  const result = await pool.request().query(`
+    SELECT * FROM [Asset3D]
+    WHERE IsDeleted = 0
+    ORDER BY CreatedAt DESC
+  `)
+ 
+  return result.recordset
+}
+
 export const listMarketplaceAssets = async (): Promise<Asset3D[]> => {
   const pool = await getDbPool()
 

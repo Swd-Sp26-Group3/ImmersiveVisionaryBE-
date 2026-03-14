@@ -5,7 +5,9 @@ import {
   createAsset,
   deleteAsset,
   getAssetById,
+  listAllAssets,
   listMarketplaceAssets,
+  listMyAssets,
   submitAssetForPublish,
   updateAsset,
   type AssetType
@@ -184,6 +186,35 @@ export const createAssetHandler = async (req: AuthRequest, res: Response): Promi
     }
 
     res.status(500).json({ message: 'Server error while uploading asset' })
+  }
+}
+
+export const listMyAssetsHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Unauthorized' })
+      return
+    }
+ 
+    const assets = await listMyAssets(req.user.userId)
+ 
+    res.status(200).json({
+      message: 'Get my assets successfully',
+      data: assets
+    })
+  } catch (error) {
+    console.error('Error in listMyAssetsHandler:', error)
+    res.status(500).json({ message: 'Server error while getting my assets' })
+  }
+}
+
+export const listAllAssetsHandler = async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const assets = await listAllAssets()
+    res.status(200).json({ message: 'Get all assets successfully', data: assets })
+  } catch (error) {
+    console.error('Error in listAllAssetsHandler:', error)
+    res.status(500).json({ message: 'Server error while getting all assets' })
   }
 }
 
@@ -423,7 +454,9 @@ export const assetController = {
   update: updateAssetHandler,
   delete: deleteAssetHandler,
   getById: getAssetByIdHandler,
+  listAll: listAllAssetsHandler,
   listMarketplace: listMarketplaceAssetsHandler,
+  listMy: listMyAssetsHandler,
   submit: submitAssetHandler,
   approve: approveAssetHandler
 }

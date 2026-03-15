@@ -245,3 +245,49 @@ export const refundMarketplaceOrder = async (
 
   throw new Error('ORDER_CANNOT_REFUND')
 }
+
+export const updateMarketplaceOrderStatus = async (
+  mpOrderId: number,
+  status: MarketplaceOrderStatus
+): Promise<MarketplaceOrder> => {
+  const pool = await getDbPool()
+
+  const result = await pool
+    .request()
+    .input('MpOrderId', sql.Int, mpOrderId)
+    .input('Status', sql.NVarChar(50), status)
+    .query(`
+      UPDATE [MarketplaceOrder]
+      SET Status = @Status
+      OUTPUT INSERTED.*
+      WHERE MpOrderId = @MpOrderId
+    `)
+
+  if (result.recordset.length === 0) {
+    throw new Error('ORDER_NOT_FOUND')
+  }
+
+  return result.recordset[0]
+}
+
+export const findPendingMarketplaceOrder = async (
+  assetId: number,
+  companyId: number
+): Promise<MarketplaceOrder | null> => {
+  const pool = await getDbPool()
+
+  const result = await pool
+    .request()
+    .input('AssetId', sql.Int, assetId)
+    .input('BuyerCompanyId', sql.Int, companyId)
+    .query(`
+      SELECT TOP 1 *
+      FROM [MarketplaceOrder]
+      WHERE AssetId = @AssetId
+        AND BuyerCompanyId = @BuyerCompanyId
+        AND Status = 'PENDING'
+      ORDER BY MpOrderId DESC
+    `)
+
+  return result.recordset[0] ?? null
+}

@@ -7,9 +7,11 @@ import { config } from '../config/config'
  */
 function sortObject(obj: Record<string, string>): Record<string, string> {
     const sorted: Record<string, string> = {}
-    const keys = Object.keys(obj).sort()
+    const keys = Object.keys(obj).map(k => encodeURIComponent(k)).sort()
     for (const key of keys) {
-        sorted[key] = obj[key]
+        const decodedKey = decodeURIComponent(key)
+        // VNPay standard requires spaces to be URL encoded as '+'
+        sorted[key] = encodeURIComponent(obj[decodedKey]).replace(/%20/g, '+')
     }
     return sorted
 }

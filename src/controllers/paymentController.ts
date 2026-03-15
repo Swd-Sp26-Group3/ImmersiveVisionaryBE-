@@ -9,6 +9,7 @@ import {
   type PaymentType
 } from '../services/paymentService'
 import { createPaymentUrl, verifySecureHash } from '../services/vnpayService'
+import { updateMarketplaceOrderStatus, findPendingMarketplaceOrder } from '../services/marketplaceOrderService'
 
 const ALLOWED_PAYMENT_TYPES: PaymentType[] = ['DEPOSIT', 'FULL', 'MILESTONE', 'ASSET']
 
@@ -114,6 +115,18 @@ export const confirmPaymentHandler = async (req: AuthRequest, res: Response): Pr
     }
 
     const payment = await confirmPayment(paymentId)
+
+    // If it's an asset purchase, update the MarketplaceOrder too
+    if (payment.PaymentType === 'ASSET' && payment.AssetId) {
+      try {
+        const mpOrder = await findPendingMarketplaceOrder(payment.AssetId, payment.CompanyId)
+        if (mpOrder) {
+          await updateMarketplaceOrderStatus(mpOrder.MpOrderId, 'PAID')
+        }
+      } catch (mpError) {
+        console.error('Failed to update MarketplaceOrder status in confirmPayment:', mpError)
+      }
+    }
 
     res.status(200).json({
       message: 'Confirm payment successfully',
@@ -231,11 +244,12 @@ export const createVnpayUrlHandler = async (req: AuthRequest, res: Response): Pr
     })
 
     res.status(200).json({ success: true, paymentUrl })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in createVnpayUrlHandler:', error)
-    res.status(500).json({ message: 'Server error while creating VNPay URL' })
+    res.status(500).json({ message: `Server error while creating VNPay URL: ${error.message}` })
   }
 }
+
 
 /**
  * Handle VNPay Return URL redirect (Client-side)
@@ -308,6 +322,18 @@ export const vnpayIpnHandler = async (req: AuthRequest, res: Response): Promise<
     // Success
     if (responseCode === '00') {
       await updatePaymentStatus(paymentId, 'PAID')
+
+      // If it's an asset purchase, update the MarketplaceOrder too
+      if (payment.PaymentType === 'ASSET' && payment.AssetId) {
+        try {
+          const mpOrder = await findPendingMarketplaceOrder(payment.AssetId, payment.CompanyId)
+          if (mpOrder) {
+            await updateMarketplaceOrderStatus(mpOrder.MpOrderId, 'PAID')
+          }
+        } catch (mpError) {
+          console.error('Failed to update MarketplaceOrder status:', mpError)
+        }
+      }
     } else {
       await updatePaymentStatus(paymentId, 'FAILED')
     }

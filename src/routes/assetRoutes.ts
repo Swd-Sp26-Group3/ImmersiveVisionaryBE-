@@ -12,6 +12,6 @@ router.get('/:id', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTO
 router.put('/:id', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST']), assetController.update)
 router.delete('/:id', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST']), assetController.delete)
 router.put('/:id/submit', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST']), assetController.submit)
-router.put('/:id/approve', authenticate, authorize(['ADMIN']), assetController.approve)
+router.put('/:id/approve', authenticate, authorize(['ADMIN', 'MANAGER']), assetController.approve)
 
 export default router

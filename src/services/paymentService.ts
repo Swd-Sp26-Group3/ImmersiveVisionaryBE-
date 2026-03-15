@@ -105,3 +105,24 @@ export const listPayments = async (companyId?: number): Promise<Payment[]> => {
 
   return result.recordset
 }
+export const updatePaymentStatus = async (paymentId: number, status: PaymentStatus): Promise<Payment> => {
+  const pool = await getDbPool()
+
+  const result = await pool
+    .request()
+    .input('PaymentId', sql.Int, paymentId)
+    .input('PaymentStatus', sql.NVarChar(50), status)
+    .input('PaymentDate', sql.DateTime, status === 'PAID' ? new Date() : null)
+    .query(`
+      UPDATE [Payment]
+      SET PaymentStatus = @PaymentStatus, PaymentDate = @PaymentDate
+      OUTPUT INSERTED.*
+      WHERE PaymentId = @PaymentId
+    `)
+
+  if (result.recordset.length === 0) {
+    throw new Error('PAYMENT_NOT_FOUND')
+  }
+
+  return result.recordset[0]
+}

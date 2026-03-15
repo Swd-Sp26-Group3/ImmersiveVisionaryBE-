@@ -19,6 +19,7 @@
     "nodemailer": "^7.0.5",
     "pdfkit": "^0.17.1",
     "prisma": "^6.8.2",
+    "qs": "^6.15.0",
     "reflect-metadata": "^0.2.2",
     "uuid": "^11.1.0",
     "winston": "^3.17.0"

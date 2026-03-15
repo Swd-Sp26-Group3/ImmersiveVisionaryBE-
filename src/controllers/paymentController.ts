@@ -5,8 +5,10 @@ import {
   confirmPayment,
   getPaymentById,
   listPayments,
+  updatePaymentStatus,
   type PaymentType
 } from '../services/paymentService'
+import { createPaymentUrl, verifySecureHash } from '../services/vnpayService'
 
 const ALLOWED_PAYMENT_TYPES: PaymentType[] = ['DEPOSIT', 'FULL', 'MILESTONE', 'ASSET']
 
@@ -186,11 +188,145 @@ export const listPaymentsHandler = async (req: AuthRequest, res: Response): Prom
   }
 }
 
+/**
+ * Handle VNPay payment URL creation
+ */
+export const createVnpayUrlHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Unauthorized' })
+      return
+    }
+
+    const { paymentId, bankCode, locale } = req.body
+
+    if (!paymentId || !Number.isInteger(paymentId)) {
+      res.status(400).json({ message: 'paymentId is required' })
+      return
+    }
+
+    const payment = await getPaymentById(paymentId)
+    if (!payment) {
+      res.status(404).json({ message: 'Payment not found' })
+      return
+    }
+
+    if (payment.PaymentStatus !== 'PENDING') {
+      res.status(400).json({ message: 'Only pending payments can be processed' })
+      return
+    }
+
+    const ipAddr =
+      req.headers['x-forwarded-for'] ||
+      req.connection.remoteAddress ||
+      '127.0.0.1'
+
+    const paymentUrl = createPaymentUrl({
+      amount: payment.Amount,
+      orderId: payment.PaymentId.toString(),
+      orderInfo: `Thanh toan hoa don ${payment.PaymentId}`,
+      ipAddr: typeof ipAddr === 'string' ? ipAddr : ipAddr[0],
+      bankCode,
+      locale
+    })
+
+    res.status(200).json({ success: true, paymentUrl })
+  } catch (error) {
+    console.error('Error in createVnpayUrlHandler:', error)
+    res.status(500).json({ message: 'Server error while creating VNPay URL' })
+  }
+}
+
+/**
+ * Handle VNPay Return URL redirect (Client-side)
+ */
+export const vnpayReturnHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const vnpParams = req.query as Record<string, string>
+    const isValid = verifySecureHash(vnpParams)
+
+    if (!isValid) {
+      res.status(400).json({ success: false, message: 'Invalid signature' })
+      return
+    }
+
+    const responseCode = vnpParams['vnp_ResponseCode']
+    const paymentId = parseInt(vnpParams['vnp_TxnRef'])
+
+    if (responseCode === '00') {
+      res.status(200).json({
+        success: true,
+        message: 'Payment success',
+        data: { paymentId }
+      })
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Payment failed',
+        errorCode: responseCode
+      })
+    }
+  } catch (error) {
+    console.error('Error in vnpayReturnHandler:', error)
+    res.status(500).json({ message: 'Server error while processing VNPay return' })
+  }
+}
+
+/**
+ * Handle VNPay IPN (Server-to-Server callback)
+ */
+export const vnpayIpnHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const vnpParams = req.query as Record<string, string>
+    const isValid = verifySecureHash(vnpParams)
+
+    if (!isValid) {
+      res.status(200).json({ RspCode: '97', Message: 'Invalid signature' })
+      return
+    }
+
+    const paymentId = parseInt(vnpParams['vnp_TxnRef'])
+    const vnp_Amount = parseInt(vnpParams['vnp_Amount']) / 100
+    const responseCode = vnpParams['vnp_ResponseCode']
+
+    const payment = await getPaymentById(paymentId)
+    if (!payment) {
+      res.status(200).json({ RspCode: '01', Message: 'Order not found' })
+      return
+    }
+
+    if (payment.Amount !== vnp_Amount) {
+      res.status(200).json({ RspCode: '04', Message: 'Invalid amount' })
+      return
+    }
+
+    if (payment.PaymentStatus !== 'PENDING') {
+      res.status(200).json({ RspCode: '02', Message: 'Order already confirmed' })
+      return
+    }
+
+    // Success
+    if (responseCode === '00') {
+      await updatePaymentStatus(paymentId, 'PAID')
+    } else {
+      await updatePaymentStatus(paymentId, 'FAILED')
+    }
+
+    res.status(200).json({ RspCode: '00', Message: 'Success' })
+  } catch (error) {
+    console.error('Error in vnpayIpnHandler:', error)
+    res.status(200).json({ RspCode: '99', Message: 'Unknown error' })
+  }
+}
+
 export const paymentController = {
   create: createPaymentHandler,
   confirm: confirmPaymentHandler,
   getById: getPaymentDetailHandler,
-  list: listPaymentsHandler
+  list: listPaymentsHandler,
+  createVnpayUrl: createVnpayUrlHandler,
+  vnpayReturn: vnpayReturnHandler,
+  vnpayIpn: vnpayIpnHandler
 }
 
 export default paymentController

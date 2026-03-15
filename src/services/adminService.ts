@@ -1,7 +1,133 @@
 import { getDbPool } from '../config/database'
+import bcrypt from 'bcrypt'
 import type { User, Service, DashboardStats } from '../types/type'
 
+interface AdminCreateUserInput {
+  UserName: string
+  Email: string
+  Password: string
+  Phone?: string | null
+  CompanyId?: number | null
+  RoleId: number
+}
+
 class AdminService {
+  async createUserByAdmin(input: AdminCreateUserInput) {
+    const pool = await getDbPool()
+
+    const existingUserName = await pool.request().input('userName', input.UserName).query(`
+      SELECT UserName FROM [User] WHERE UserName = @userName
+    `)
+
+    if (existingUserName.recordset.length > 0) {
+      throw new Error('UserName đã tồn tại')
+    }
+
+    const existingEmail = await pool.request().input('email', input.Email).query(`
+      SELECT Email FROM [User] WHERE Email = @email
+    `)
+
+    if (existingEmail.recordset.length > 0) {
+      throw new Error('Email đã tồn tại')
+    }
+
+    const roleResult = await pool.request().input('roleId', input.RoleId).query(`
+      SELECT RoleId, RoleName FROM [Role] WHERE RoleId = @roleId
+    `)
+
+    if (roleResult.recordset.length === 0) {
+      throw new Error('Role không tồn tại')
+    }
+
+    if (input.CompanyId) {
+      const companyExists = await pool.request().input('companyId', input.CompanyId).query(`
+        SELECT CompanyId FROM [Company] WHERE CompanyId = @companyId
+      `)
+
+      if (companyExists.recordset.length === 0) {
+        throw new Error('Company không tồn tại')
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(input.Password, 10)
+
+    await pool
+      .request()
+      .input('userName', input.UserName)
+      .input('email', input.Email)
+      .input('passwordHash', passwordHash)
+      .input('roleId', input.RoleId)
+      .input('phone', input.Phone || null)
+      .input('companyId', input.CompanyId || null)
+      .query(`
+        INSERT INTO [User] (UserName, Email, PasswordHash, RoleId, Phone, CompanyId)
+        VALUES (@userName, @email, @passwordHash, @roleId, @phone, @companyId)
+      `)
+
+    const createdUser = await pool.request().input('email', input.Email).query(`
+      SELECT
+        u.UserId,
+        u.UserName,
+        u.Email,
+        u.Phone,
+        u.CompanyId,
+        u.RoleId,
+        r.RoleName,
+        u.CreatedAt,
+        u.UpdatedAt
+      FROM [User] u
+      INNER JOIN [Role] r ON u.RoleId = r.RoleId
+      WHERE u.Email = @email
+    `)
+
+    return createdUser.recordset[0]
+  }
+
+  async updateUserRoleByAdmin(userId: number, roleId: number) {
+    const pool = await getDbPool()
+
+    const roleResult = await pool.request().input('roleId', roleId).query(`
+      SELECT RoleId FROM [Role] WHERE RoleId = @roleId
+    `)
+
+    if (roleResult.recordset.length === 0) {
+      throw new Error('Role không tồn tại')
+    }
+
+    const updateResult = await pool
+      .request()
+      .input('userId', userId)
+      .input('roleId', roleId)
+      .input('updatedAt', new Date())
+      .query(`
+        UPDATE [User]
+        SET RoleId = @roleId, UpdatedAt = @updatedAt
+        WHERE UserId = @userId AND IsDeleted = 0
+      `)
+
+    if (updateResult.rowsAffected[0] === 0) {
+      throw new Error('User không tồn tại')
+    }
+
+    const updatedUser = await pool.request().input('userId', userId).query(`
+      SELECT
+        u.UserId,
+        u.UserName,
+        u.Email,
+        u.Phone,
+        u.CompanyId,
+        u.RoleId,
+        r.RoleName,
+        u.CreatedAt,
+        u.UpdatedAt
+      FROM [User] u
+      INNER JOIN [Role] r ON u.RoleId = r.RoleId
+      WHERE u.UserId = @userId AND u.IsDeleted = 0
+    `)
+
+    return updatedUser.recordset[0]
+  }
+
   // Dashboard Stats
   async getDashboardStats(): Promise<DashboardStats> {
     const pool = await getDbPool()

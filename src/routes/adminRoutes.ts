@@ -10,6 +10,8 @@ router.use(authorize(['ADMIN']))
 
 // Dashboard
 router.get('/dashboard', authenticate, adminController.getDashboardStats)
+router.post('/users', adminController.createUser)
+router.put('/users/:id/role', adminController.updateUserRole)
 
 
 export { router as adminRoutes }

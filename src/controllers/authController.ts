@@ -11,7 +11,7 @@ import {
 import { getDbPool } from '../config/database'
 
 export const registerHandler = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { UserName, Email, PasswordHash, ConfirmPassword, Phone, CompanyId } = req.body
+  const { UserName, Email, PasswordHash, ConfirmPassword, Phone, CompanyId, roleId } = req.body
 
   if (!UserName || !Email || !PasswordHash || !ConfirmPassword) {
     res.status(400).json({ message: 'UserName, Email, PasswordHash, và ConfirmPassword là bắt buộc' })
@@ -35,13 +35,19 @@ export const registerHandler = async (req: AuthRequest, res: Response): Promise<
     return
   }
 
+  if (roleId !== undefined && (!Number.isInteger(roleId) || roleId <= 0)) {
+    res.status(400).json({ message: 'roleId phải là số nguyên dương' })
+    return
+  }
+
   try {
     const user = await register(
       UserName,
       Email,
       PasswordHash,
       Phone || null,
-      CompanyId || null
+      CompanyId || null,
+      roleId ?? null
     )
 
     res.status(201).json({ 

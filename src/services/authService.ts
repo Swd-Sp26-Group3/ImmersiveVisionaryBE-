@@ -20,7 +20,8 @@ export const register = async (
   Email: string,
   Password: string,
   Phone: string | null = null,
-  CompanyId: number | null = null
+  CompanyId: number | null = null,
+  RoleId: number | null = null
 ) => {
   const passwordRegex = /^.{6,12}$/
   if (!passwordRegex.test(Password)) {
@@ -47,16 +48,36 @@ export const register = async (
     throw new Error('Email đã tồn tại')
   }
 
-  // Lấy RoleId cho "CUSTOMER" (default role)
-  const roleRes = await pool.request().input('name', 'CUSTOMER').query(`
-    SELECT RoleId FROM [Role] WHERE RoleName = @name
-  `)
+  let roleId: number
 
-  if (roleRes.recordset.length === 0) {
-    throw new Error('Role CUSTOMER không tồn tại')
+  // Register cho phép truyền RoleId nhưng chỉ được CUSTOMER hoặc ARTIST.
+  if (RoleId !== null) {
+    const roleRes = await pool.request().input('roleId', RoleId).query(`
+      SELECT RoleId, RoleName FROM [Role] WHERE RoleId = @roleId
+    `)
+
+    if (roleRes.recordset.length === 0) {
+      throw new Error('RoleId không hợp lệ')
+    }
+
+    const role = roleRes.recordset[0]
+    if (role.RoleName !== 'CUSTOMER' && role.RoleName !== 'ARTIST') {
+      throw new Error('Register chỉ cho phép role CUSTOMER hoặc ARTIST')
+    }
+
+    roleId = role.RoleId
+  } else {
+    // Mặc định role CUSTOMER nếu không truyền RoleId.
+    const roleRes = await pool.request().input('name', 'CUSTOMER').query(`
+      SELECT RoleId FROM [Role] WHERE RoleName = @name
+    `)
+
+    if (roleRes.recordset.length === 0) {
+      throw new Error('Role CUSTOMER không tồn tại')
+    }
+
+    roleId = roleRes.recordset[0].RoleId
   }
-
-  const roleId = roleRes.recordset[0].RoleId
 
   // Nếu CompanyId được cung cấp, kiểm tra nó tồn tại
   if (CompanyId) {

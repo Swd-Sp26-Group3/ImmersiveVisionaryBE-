@@ -260,7 +260,7 @@ export const vnpayReturnHandler = async (req: AuthRequest, res: Response): Promi
     const isValid = verifySecureHash(vnpParams)
 
     if (!isValid) {
-      res.status(400).json({ success: false, message: 'Invalid signature' })
+      res.status(400).send('Invalid signature')
       return
     }
 
@@ -268,21 +268,42 @@ export const vnpayReturnHandler = async (req: AuthRequest, res: Response): Promi
     const paymentId = parseInt(vnpParams['vnp_TxnRef'])
 
     if (responseCode === '00') {
-      res.status(200).json({
-        success: true,
-        message: 'Payment success',
-        data: { paymentId }
-      })
+      // 1. Update Payment status to PAID
+      const payment = await confirmPayment(paymentId)
+
+      // 2. Sync MarketplaceOrder status if needed
+      let mpOrderId: number | null = null
+      if (payment.PaymentType === 'ASSET' && payment.AssetId) {
+        try {
+          const mpOrder = await findPendingMarketplaceOrder(payment.AssetId, payment.CompanyId)
+          if (mpOrder) {
+            await updateMarketplaceOrderStatus(mpOrder.MpOrderId, 'PAID')
+            mpOrderId = mpOrder.MpOrderId
+          }
+        } catch (mpError) {
+          console.error('Failed to sync MarketplaceOrder in vnpayReturnHandler:', mpError)
+        }
+      }
+
+      // 3. Redirect to Frontend Success Page
+      // We try to find the frontend URL from CORS_ORIGIN or default to localhost:3000
+      const origin = process.env.CORS_ORIGIN || 'http://localhost:3000'
+      const frontendUrl = origin.includes('3000') ? origin : 'http://localhost:3000'
+
+      let redirectUrl = `${frontendUrl}/marketplace/order-success?orderId=${mpOrderId ?? ''}`
+      if (payment.AssetId) {
+        redirectUrl += `&productId=${payment.AssetId}`
+      }
+
+      res.redirect(redirectUrl)
     } else {
-      res.status(400).json({
-        success: false,
-        message: 'Payment failed',
-        errorCode: responseCode
-      })
+      const origin = process.env.CORS_ORIGIN || 'http://localhost:3000'
+      const frontendUrl = origin.includes('3000') ? origin : 'http://localhost:3000'
+      res.redirect(`${frontendUrl}/customer-dashboard?tab=purchases&error=vnpay_${responseCode}`)
     }
   } catch (error) {
     console.error('Error in vnpayReturnHandler:', error)
-    res.status(500).json({ message: 'Server error while processing VNPay return' })
+    res.status(500).send('Server error while processing VNPay return')
   }
 }
 

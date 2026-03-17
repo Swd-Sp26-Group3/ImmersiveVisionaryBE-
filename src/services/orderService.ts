@@ -74,17 +74,38 @@ export const createOrder = async (
   const userCompanyId = await getUserCompanyId(userId)
 
   // Customers must always create orders for their own company.
-  const companyId = normalizedRole === 'CUSTOMER' ? userCompanyId : payload.CompanyId ?? userCompanyId
-
-  if (!companyId) {
-    throw new Error('USER_COMPANY_NOT_FOUND')
-  }
+  let companyId = normalizedRole === 'CUSTOMER' ? userCompanyId : payload.CompanyId ?? userCompanyId
 
   const pool = await getDbPool()
   const transaction = new sql.Transaction(pool)
   await transaction.begin()
 
   try {
+    if (!companyId) {
+      if (normalizedRole === 'CUSTOMER') {
+        // Auto-create a Personal Account company for the customer
+        const createCompanyReq = new sql.Request(transaction)
+        const companyRes = await createCompanyReq
+          .input('CompanyName', sql.NVarChar(200), 'Personal Account')
+          .input('CompanyType', sql.NVarChar(50), 'BRAND')
+          .query(`
+            INSERT INTO [Company] (CompanyName, CompanyType, Status)
+            OUTPUT INSERTED.CompanyId
+            VALUES (@CompanyName, @CompanyType, 'ACTIVE')
+          `)
+        
+        companyId = companyRes.recordset[0].CompanyId
+
+        // Link company to user
+        const updateUserReq = new sql.Request(transaction)
+        await updateUserReq
+          .input('CompanyId', sql.Int, companyId)
+          .input('UserId', sql.Int, userId)
+          .query('UPDATE [User] SET CompanyId = @CompanyId WHERE UserId = @UserId')
+      } else {
+        throw new Error('USER_COMPANY_NOT_FOUND')
+      }
+    }
     const request = new sql.Request(transaction)
     const result = await request
       .input('CompanyId', sql.Int, companyId)

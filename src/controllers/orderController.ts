@@ -73,20 +73,36 @@ export const createOrderHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
-    const { CompanyId, ProductId, PackageId, Brief, TargetPlatform, Deadline } = req.body
+    const {
+      CompanyId,
+      ProductId,
+      PackageId,
+      ProjectName,
+      ProductType,
+      Brief,
+      Budget,
+      DeliverySpeed,
+      TargetPlatform,
+      ArOptimize,
+      Animation,
+      MultiVariant,
+      SourceFiles,
+      Deadline,
+      Attachments
+    } = req.body
 
     if (CompanyId !== undefined && (!Number.isInteger(CompanyId) || CompanyId <= 0)) {
       res.status(400).json({ message: 'CompanyId must be a positive integer' })
       return
     }
 
-    if (!Number.isInteger(ProductId) || ProductId <= 0) {
-      res.status(400).json({ message: 'ProductId is required and must be a positive integer' })
+    if (ProductId !== undefined && ProductId !== null && (!Number.isInteger(ProductId) || ProductId <= 0)) {
+      res.status(400).json({ message: 'ProductId must be a positive integer' })
       return
     }
 
-    if (!Number.isInteger(PackageId) || PackageId <= 0) {
-      res.status(400).json({ message: 'PackageId is required and must be a positive integer' })
+    if (PackageId !== undefined && PackageId !== null && (!Number.isInteger(PackageId) || PackageId <= 0)) {
+      res.status(400).json({ message: 'PackageId must be a positive integer' })
       return
     }
 
@@ -108,13 +124,27 @@ export const createOrderHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
+    const parsedProjectName = parseOptionalString(ProjectName)
+    const parsedProductType = parseOptionalString(ProductType)
+    const parsedBudget = parseOptionalString(Budget)
+    const parsedDeliverySpeed = parseOptionalString(DeliverySpeed)
+
     const order = await createOrder(req.user.userId, req.user.roleName, {
       CompanyId,
-      ProductId,
-      PackageId,
+      ProductId: ProductId ?? null,
+      PackageId: PackageId ?? null,
+      ProjectName: parsedProjectName,
+      ProductType: parsedProductType,
       Brief: parsedBrief,
+      Budget: parsedBudget,
+      DeliverySpeed: parsedDeliverySpeed,
       TargetPlatform: parsedTargetPlatform,
-      Deadline: parsedDeadline
+      ArOptimize: Boolean(ArOptimize),
+      Animation: Boolean(Animation),
+      MultiVariant: Boolean(MultiVariant),
+      SourceFiles: Boolean(SourceFiles),
+      Deadline: parsedDeadline,
+      Attachments: Array.isArray(Attachments) ? Attachments : []
     })
 
     res.status(201).json({

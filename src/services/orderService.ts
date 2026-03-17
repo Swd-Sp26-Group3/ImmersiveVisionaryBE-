@@ -6,10 +6,18 @@ export type CreativeOrderStatus = 'NEW' | 'IN_PRODUCTION' | 'REVIEW' | 'COMPLETE
 export interface CreativeOrder {
   OrderId: number
   CompanyId: number
-  ProductId: number
-  PackageId: number
+  ProductId: number | null
+  PackageId: number | null
+  ProjectName: string | null
+  ProductType: string | null
   Brief: string | null
+  Budget: string | null
+  DeliverySpeed: string | null
   TargetPlatform: string | null
+  ArOptimize: boolean
+  Animation: boolean
+  MultiVariant: boolean
+  SourceFiles: boolean
   Status: CreativeOrderStatus
   Deadline: Date | null
   CreatedAt: Date
@@ -25,11 +33,20 @@ export interface CreativeOrderDetail extends CreativeOrder {
 
 export interface CreateOrderInput {
   CompanyId?: number
-  ProductId: number
-  PackageId: number
+  ProductId?: number | null
+  PackageId?: number | null
+  ProjectName?: string | null
+  ProductType?: string | null
   Brief?: string | null
+  Budget?: string | null
+  DeliverySpeed?: string | null
   TargetPlatform?: string | null
+  ArOptimize?: boolean
+  Animation?: boolean
+  MultiVariant?: boolean
+  SourceFiles?: boolean
   Deadline?: Date | null
+  Attachments?: { FileName: string; MimeType: string; Base64Data: string }[]
 }
 
 const getUserCompanyId = async (userId: number): Promise<number | null> => {
@@ -64,39 +81,57 @@ export const createOrder = async (
   }
 
   const pool = await getDbPool()
+  const transaction = new sql.Transaction(pool)
+  await transaction.begin()
 
-  const result = await pool
-    .request()
-    .input('CompanyId', sql.Int, companyId)
-    .input('ProductId', sql.Int, payload.ProductId)
-    .input('PackageId', sql.Int, payload.PackageId)
-    .input('Brief', sql.NVarChar(sql.MAX), payload.Brief ?? null)
-    .input('TargetPlatform', sql.NVarChar(200), payload.TargetPlatform ?? null)
-    .input('Status', sql.NVarChar(50), 'NEW')
-    .input('Deadline', sql.DateTime, payload.Deadline ?? null)
-    .query(`
-      INSERT INTO [CreativeOrder] (
-        CompanyId,
-        ProductId,
-        PackageId,
-        Brief,
-        TargetPlatform,
-        Status,
-        Deadline
-      )
-      OUTPUT INSERTED.*
-      VALUES (
-        @CompanyId,
-        @ProductId,
-        @PackageId,
-        @Brief,
-        @TargetPlatform,
-        @Status,
-        @Deadline
-      )
-    `)
+  try {
+    const request = new sql.Request(transaction)
+    const result = await request
+      .input('CompanyId', sql.Int, companyId)
+      .input('ProductId', sql.Int, payload.ProductId ?? null)
+      .input('PackageId', sql.Int, payload.PackageId ?? null)
+      .input('ProjectName', sql.NVarChar(200), payload.ProjectName ?? null)
+      .input('ProductType', sql.NVarChar(100), payload.ProductType ?? null)
+      .input('Brief', sql.NVarChar(sql.MAX), payload.Brief ?? null)
+      .input('Budget', sql.NVarChar(50), payload.Budget ?? null)
+      .input('DeliverySpeed', sql.NVarChar(50), payload.DeliverySpeed ?? null)
+      .input('TargetPlatform', sql.NVarChar(200), payload.TargetPlatform ?? null)
+      .input('ArOptimize', sql.Bit, payload.ArOptimize ? 1 : 0)
+      .input('Animation', sql.Bit, payload.Animation ? 1 : 0)
+      .input('MultiVariant', sql.Bit, payload.MultiVariant ? 1 : 0)
+      .input('SourceFiles', sql.Bit, payload.SourceFiles ? 1 : 0)
+      .input('Status', sql.NVarChar(50), 'NEW')
+      .input('Deadline', sql.DateTime, payload.Deadline ?? null)
+      .query(`
+        INSERT INTO [CreativeOrder] (
+          CompanyId, ProductId, PackageId, ProjectName, ProductType, Brief, Budget, DeliverySpeed, TargetPlatform, ArOptimize, Animation, MultiVariant, SourceFiles, Status, Deadline
+        )
+        OUTPUT INSERTED.*
+        VALUES (
+          @CompanyId, @ProductId, @PackageId, @ProjectName, @ProductType, @Brief, @Budget, @DeliverySpeed, @TargetPlatform, @ArOptimize, @Animation, @MultiVariant, @SourceFiles, @Status, @Deadline
+        )
+      `)
 
-  return result.recordset[0]
+    const order = result.recordset[0]
+
+    if (payload.Attachments && payload.Attachments.length > 0) {
+      for (const att of payload.Attachments) {
+        const attReq = new sql.Request(transaction)
+        await attReq
+          .input('OrderId', sql.Int, order.OrderId)
+          .input('FileName', sql.NVarChar(200), att.FileName)
+          .input('MimeType', sql.NVarChar(100), att.MimeType)
+          .input('Base64Data', sql.VarChar(sql.MAX), att.Base64Data)
+          .query('INSERT INTO OrderAttachment (OrderId, FileName, MimeType, Base64Data) VALUES (@OrderId, @FileName, @MimeType, @Base64Data)')
+      }
+    }
+
+    await transaction.commit()
+    return order
+  } catch (error) {
+    await transaction.rollback()
+    throw error
+  }
 }
 
 export const getOrderDetailById = async (orderId: number): Promise<CreativeOrderDetail | null> => {

@@ -93,7 +93,7 @@ export const createOrder = async (
             OUTPUT INSERTED.CompanyId
             VALUES (@CompanyName, @CompanyType, 'ACTIVE')
           `)
-        
+
         companyId = companyRes.recordset[0].CompanyId
 
         // Link company to user
@@ -223,11 +223,11 @@ export const listOrdersForArtist = async (userId: number): Promise<CreativeOrder
     WHERE o.IsDeleted = 0
     ORDER BY o.CreatedAt DESC
   `)
- 
+
   if (assignedResult.recordset.length > 0) {
     return assignedResult.recordset
   }
- 
+
   const fallbackResult = await pool.request().query(`
     SELECT
       o.OrderId, o.CompanyId, o.ProductId, o.PackageId, o.Brief, o.TargetPlatform,
@@ -241,7 +241,7 @@ export const listOrdersForArtist = async (userId: number): Promise<CreativeOrder
       AND o.Status NOT IN ('COMPLETED', 'DELIVERED', 'CANCELLED')
     ORDER BY o.CreatedAt DESC
   `)
- 
+
   return fallbackResult.recordset
 }
 
@@ -291,26 +291,64 @@ export const listOrdersForManager = async (): Promise<CreativeOrderDetail[]> => 
   return result.recordset
 }
 
-export const updateOrderStatus = async (orderId: number, status: CreativeOrderStatus): Promise<CreativeOrder> => {
+export const updateOrderStatus = async (
+  orderId: number,
+  status: CreativeOrderStatus,
+  artistId?: number
+): Promise<CreativeOrder> => {
   const pool = await getDbPool()
+  const transaction = new sql.Transaction(pool)
+  await transaction.begin()
 
-  const result = await pool
-    .request()
-    .input('OrderId', sql.Int, orderId)
-    .input('Status', sql.NVarChar(50), status)
-    .input('UpdatedAt', sql.DateTime, new Date())
-    .query(`
-      UPDATE [CreativeOrder]
-      SET Status = @Status, UpdatedAt = @UpdatedAt
-      OUTPUT INSERTED.*
-      WHERE OrderId = @OrderId AND IsDeleted = 0
-    `)
+  try {
+    const request = new sql.Request(transaction)
+    const result = await request
+      .input('OrderId', sql.Int, orderId)
+      .input('Status', sql.NVarChar(50), status)
+      .input('UpdatedAt', sql.DateTime, new Date())
+      .query(`
+        UPDATE [CreativeOrder]
+        SET Status = @Status, UpdatedAt = @UpdatedAt
+        OUTPUT INSERTED.*
+        WHERE OrderId = @OrderId AND IsDeleted = 0
+      `)
 
-  if (result.recordset.length === 0) {
-    throw new Error('ORDER_NOT_FOUND')
+    if (result.recordset.length === 0) {
+      throw new Error('ORDER_NOT_FOUND')
+    }
+
+    const order = result.recordset[0]
+
+    // Nếu status là IN_PRODUCTION và có artistId, tạo ProductionStage
+    if (status === 'IN_PRODUCTION' && artistId) {
+      const stageReq = new sql.Request(transaction)
+      await stageReq
+        .input('OrderId', sql.Int, orderId)
+        .input('StageName', sql.NVarChar(50), 'MODELING')
+        .input('StageOrder', sql.Int, 1)
+        .input('AssignedTo', sql.Int, artistId)
+        .input('Status', sql.NVarChar(50), 'IN_PROGRESS')
+        .query(`
+          IF NOT EXISTS (SELECT 1 FROM ProductionStage WHERE OrderId = @OrderId)
+          BEGIN
+            INSERT INTO ProductionStage (OrderId, StageName, StageOrder, AssignedTo, Status, StartDate)
+            VALUES (@OrderId, @StageName, @StageOrder, @AssignedTo, @Status, GETDATE())
+          END
+          ELSE
+          BEGIN
+            UPDATE ProductionStage 
+            SET AssignedTo = @AssignedTo, Status = @Status
+            WHERE OrderId = @OrderId
+          END
+        `)
+    }
+
+    await transaction.commit()
+    return order
+  } catch (error) {
+    await transaction.rollback()
+    throw error
   }
-
-  return result.recordset[0]
 }
 
 export const cancelOrderForCustomer = async (orderId: number, userId: number): Promise<CreativeOrder> => {

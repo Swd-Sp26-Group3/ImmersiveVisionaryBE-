@@ -212,13 +212,13 @@ export const getOrderDetailHandler = async (req: AuthRequest, res: Response): Pr
 export const listMyOrdersHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) { res.status(401).json({ message: 'Unauthorized' }); return }
- 
+
     const normalizedRole = req.user.roleName?.toUpperCase()
- 
+
     const orders = normalizedRole === 'ARTIST'
       ? await listOrdersForArtist(req.user.userId)
       : await listMyOrders(req.user.userId)
- 
+
     res.status(200).json({ message: 'Get my orders successfully', data: orders })
   } catch (error: any) {
     console.error('Error in listMyOrdersHandler:', error)
@@ -251,7 +251,7 @@ export const updateOrderStatusHandler = async (req: AuthRequest, res: Response):
       return
     }
 
-    const { Status } = req.body
+    const { Status, ArtistId } = req.body
 
     if (typeof Status !== 'string' || !ALLOWED_ORDER_STATUSES.includes(Status as CreativeOrderStatus)) {
       res.status(400).json({
@@ -260,7 +260,12 @@ export const updateOrderStatusHandler = async (req: AuthRequest, res: Response):
       return
     }
 
-    const order = await updateOrderStatus(orderId, Status as CreativeOrderStatus)
+    if (ArtistId !== undefined && ArtistId !== null && (!Number.isInteger(ArtistId) || ArtistId <= 0)) {
+      res.status(400).json({ message: 'ArtistId must be a positive integer' })
+      return
+    }
+
+    const order = await updateOrderStatus(orderId, Status as CreativeOrderStatus, ArtistId ?? undefined)
 
     res.status(200).json({
       message: 'Update order status successfully',

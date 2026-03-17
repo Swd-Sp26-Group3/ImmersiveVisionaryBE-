@@ -143,7 +143,7 @@ export const updateUserProfile = async (
     updateFields.push('CompanyId = @companyId')
     request.input('companyId', updateData.CompanyId)
   }
-  
+
   if (updateFields.length === 0) {
     throw new Error('Không có thông tin nào để cập nhật')
   }
@@ -182,7 +182,8 @@ export const getAllUsers = async (): Promise<UserListItem[]> => {
       u.RoleId,
       r.RoleName,
       u.CreatedAt,
-      u.UpdatedAt
+      u.UpdatedAt,
+      1 as IsActive
     FROM [User] u
     INNER JOIN [Role] r ON u.RoleId = r.RoleId
     LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId

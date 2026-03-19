@@ -1,13 +1,14 @@
 import sql from 'mssql'
 import { getDbPool } from '../config/database'
 
-export type FileFormat = 'GLB' | 'USDZ' | 'FBX' | 'WEBAR'
+export type FileFormat = 'GLB' | 'USDZ' | 'FBX' | 'WEBAR' | 'OBJ'
 
 export interface AssetVersion {
   VersionId: number
   AssetId: number
   FileFormat: FileFormat
   FileUrl: string | null
+  Base64Data: string | null
   PolyCount: number | null
   TextureSize: string | null
   CreatedAt: Date
@@ -16,6 +17,7 @@ export interface AssetVersion {
 export interface CreateAssetVersionInput {
   FileFormat: FileFormat
   FileUrl?: string | null
+  Base64Data?: string | null
   PolyCount?: number | null
   TextureSize?: string | null
 }
@@ -28,12 +30,13 @@ export const createAssetVersion = async (assetId: number, payload: CreateAssetVe
     .input('AssetId', sql.Int, assetId)
     .input('FileFormat', sql.NVarChar(50), payload.FileFormat)
     .input('FileUrl', sql.NVarChar(500), payload.FileUrl ?? null)
+    .input('Base64Data', sql.VarChar(sql.MAX), payload.Base64Data ?? null)
     .input('PolyCount', sql.Int, payload.PolyCount ?? null)
     .input('TextureSize', sql.NVarChar(100), payload.TextureSize ?? null)
     .query(`
-      INSERT INTO [AssetVersion] (AssetId, FileFormat, FileUrl, PolyCount, TextureSize)
+      INSERT INTO [AssetVersion] (AssetId, FileFormat, FileUrl, Base64Data, PolyCount, TextureSize)
       OUTPUT INSERTED.*
-      VALUES (@AssetId, @FileFormat, @FileUrl, @PolyCount, @TextureSize)
+      VALUES (@AssetId, @FileFormat, @FileUrl, @Base64Data, @PolyCount, @TextureSize)
     `)
 
   return result.recordset[0]

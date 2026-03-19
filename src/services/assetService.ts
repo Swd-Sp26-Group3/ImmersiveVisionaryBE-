@@ -8,6 +8,7 @@ export interface Asset3D {
   AssetId: number
   OrderId: number | null
   AssetName: string
+  Description: string | null
   PreviewImage: string | null
   CreatedBy: number
   OwnerCompanyId: number | null
@@ -16,6 +17,7 @@ export interface Asset3D {
   IsMarketplace: boolean
   Category: string | null
   Industry: string | null
+  Base64Data: string | null
   PublishStatus: AssetPublishStatus
   CreatedAt: Date
   UpdatedAt: Date | null
@@ -25,6 +27,7 @@ export interface Asset3D {
 export interface CreateAssetInput {
   OrderId?: number | null
   AssetName: string
+  Description?: string | null
   PreviewImage?: string | null
   OwnerCompanyId?: number | null
   AssetType?: AssetType | null
@@ -32,11 +35,13 @@ export interface CreateAssetInput {
   IsMarketplace?: boolean
   Category?: string | null
   Industry?: string | null
+  Base64Data?: string | null
 }
 
 export interface UpdateAssetInput {
   OrderId?: number | null
   AssetName?: string
+  Description?: string | null
   PreviewImage?: string | null
   OwnerCompanyId?: number | null
   AssetType?: AssetType | null
@@ -44,6 +49,7 @@ export interface UpdateAssetInput {
   IsMarketplace?: boolean
   Category?: string | null
   Industry?: string | null
+  Base64Data?: string | null
 }
 
 export const createAsset = async (createdBy: number, payload: CreateAssetInput): Promise<Asset3D> => {
@@ -53,6 +59,7 @@ export const createAsset = async (createdBy: number, payload: CreateAssetInput):
     .request()
     .input('OrderId', sql.Int, payload.OrderId ?? null)
     .input('AssetName', sql.NVarChar(200), payload.AssetName)
+    .input('Description', sql.NVarChar(sql.MAX), payload.Description ?? null)
     .input('PreviewImage', sql.NVarChar(500), payload.PreviewImage ?? null)
     .input('CreatedBy', sql.Int, createdBy)
     .input('OwnerCompanyId', sql.Int, payload.OwnerCompanyId ?? null)
@@ -61,11 +68,13 @@ export const createAsset = async (createdBy: number, payload: CreateAssetInput):
     .input('IsMarketplace', sql.Bit, payload.IsMarketplace ?? false)
     .input('Category', sql.NVarChar(100), payload.Category ?? null)
     .input('Industry', sql.NVarChar(100), payload.Industry ?? null)
+    .input('Base64Data', sql.VarChar(sql.MAX), payload.Base64Data ?? null)
     .input('PublishStatus', sql.NVarChar(50), 'DRAFT')
     .query(`
       INSERT INTO [Asset3D] (
         OrderId,
         AssetName,
+        Description,
         PreviewImage,
         CreatedBy,
         OwnerCompanyId,
@@ -74,12 +83,14 @@ export const createAsset = async (createdBy: number, payload: CreateAssetInput):
         IsMarketplace,
         Category,
         Industry,
+        Base64Data,
         PublishStatus
       )
       OUTPUT INSERTED.*
       VALUES (
         @OrderId,
         @AssetName,
+        @Description,
         @PreviewImage,
         @CreatedBy,
         @OwnerCompanyId,
@@ -88,6 +99,7 @@ export const createAsset = async (createdBy: number, payload: CreateAssetInput):
         @IsMarketplace,
         @Category,
         @Industry,
+        @Base64Data,
         @PublishStatus
       )
     `)
@@ -114,7 +126,7 @@ export const getAssetById = async (assetId: number): Promise<Asset3D | null> => 
 // Publish pending or draft on Artist page
 export const listMyAssets = async (createdBy: number): Promise<Asset3D[]> => {
   const pool = await getDbPool()
- 
+
   const result = await pool
     .request()
     .input('CreatedBy', sql.Int, createdBy)
@@ -124,19 +136,19 @@ export const listMyAssets = async (createdBy: number): Promise<Asset3D[]> => {
       WHERE CreatedBy = @CreatedBy AND IsDeleted = 0
       ORDER BY CreatedAt DESC
     `)
- 
+
   return result.recordset
 }
 
 export const listAllAssets = async (): Promise<Asset3D[]> => {
   const pool = await getDbPool()
- 
+
   const result = await pool.request().query(`
     SELECT * FROM [Asset3D]
     WHERE IsDeleted = 0
     ORDER BY CreatedAt DESC
   `)
- 
+
   return result.recordset
 }
 
@@ -167,6 +179,11 @@ export const updateAsset = async (assetId: number, payload: UpdateAssetInput): P
   if (payload.AssetName !== undefined) {
     setParts.push('AssetName = @AssetName')
     request.input('AssetName', sql.NVarChar(200), payload.AssetName)
+  }
+
+  if (payload.Description !== undefined) {
+    setParts.push('Description = @Description')
+    request.input('Description', sql.NVarChar(sql.MAX), payload.Description)
   }
 
   if (payload.PreviewImage !== undefined) {
@@ -202,6 +219,11 @@ export const updateAsset = async (assetId: number, payload: UpdateAssetInput): P
   if (payload.Industry !== undefined) {
     setParts.push('Industry = @Industry')
     request.input('Industry', sql.NVarChar(100), payload.Industry)
+  }
+
+  if (payload.Base64Data !== undefined) {
+    setParts.push('Base64Data = @Base64Data')
+    request.input('Base64Data', sql.VarChar(sql.MAX), payload.Base64Data)
   }
 
   if (setParts.length === 0) {

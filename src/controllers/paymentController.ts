@@ -10,6 +10,8 @@ import {
 } from '../services/paymentService'
 import { createPaymentUrl, verifySecureHash } from '../services/vnpayService'
 import { updateMarketplaceOrderStatus, findPendingMarketplaceOrder } from '../services/marketplaceOrderService'
+import { updateOrderStatus } from '../services/orderService'
+import { getAssetById } from '../services/assetService'
 
 const ALLOWED_PAYMENT_TYPES: PaymentType[] = ['DEPOSIT', 'FULL', 'MILESTONE', 'ASSET']
 
@@ -123,8 +125,14 @@ export const confirmPaymentHandler = async (req: AuthRequest, res: Response): Pr
         if (mpOrder) {
           await updateMarketplaceOrderStatus(mpOrder.MpOrderId, 'PAID')
         }
-      } catch (mpError) {
-        console.error('Failed to update MarketplaceOrder status in confirmPayment:', mpError)
+
+        // Sync back to CreativeOrder if it exists
+        const asset = await getAssetById(payment.AssetId)
+        if (asset && asset.OrderId) {
+          await updateOrderStatus(asset.OrderId, 'COMPLETED')
+        }
+      } catch (syncError) {
+        console.error('Failed to sync order statuses in confirmPayment:', syncError)
       }
     }
 
@@ -280,8 +288,14 @@ export const vnpayReturnHandler = async (req: AuthRequest, res: Response): Promi
             await updateMarketplaceOrderStatus(mpOrder.MpOrderId, 'PAID')
             mpOrderId = mpOrder.MpOrderId
           }
-        } catch (mpError) {
-          console.error('Failed to sync MarketplaceOrder in vnpayReturnHandler:', mpError)
+
+          // Sync back to CreativeOrder if it exists
+          const asset = await getAssetById(payment.AssetId)
+          if (asset && asset.OrderId) {
+            await updateOrderStatus(asset.OrderId, 'COMPLETED')
+          }
+        } catch (syncError) {
+          console.error('Failed to sync MarketplaceOrder/CreativeOrder in vnpayReturnHandler:', syncError)
         }
       }
 
@@ -351,8 +365,14 @@ export const vnpayIpnHandler = async (req: AuthRequest, res: Response): Promise<
           if (mpOrder) {
             await updateMarketplaceOrderStatus(mpOrder.MpOrderId, 'PAID')
           }
-        } catch (mpError) {
-          console.error('Failed to update MarketplaceOrder status:', mpError)
+
+          // Sync back to CreativeOrder if it exists
+          const asset = await getAssetById(payment.AssetId)
+          if (asset && asset.OrderId) {
+            await updateOrderStatus(asset.OrderId, 'COMPLETED')
+          }
+        } catch (syncError) {
+          console.error('Failed to update statuses in vnpayIpnHandler:', syncError)
         }
       }
     } else {

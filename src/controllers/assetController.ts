@@ -107,7 +107,7 @@ export const createAssetHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
-    const { OrderId, AssetName, PreviewImage, OwnerCompanyId, AssetType, Price, IsMarketplace, Category, Industry } =
+    const { OrderId, AssetName, Description, PreviewImage, OwnerCompanyId, AssetType, Price, IsMarketplace, Category, Industry, Base64Data } =
       req.body
 
     if (OrderId !== undefined && parseOptionalInt(OrderId) === undefined) {
@@ -117,6 +117,12 @@ export const createAssetHandler = async (req: AuthRequest, res: Response): Promi
 
     if (!AssetName || typeof AssetName !== 'string' || AssetName.trim() === '') {
       res.status(400).json({ message: 'AssetName is required' })
+      return
+    }
+
+    const parsedDescription = parseOptionalString(Description)
+    if (Description !== undefined && parsedDescription === undefined) {
+      res.status(400).json({ message: 'Description must be a string or null' })
       return
     }
 
@@ -161,16 +167,24 @@ export const createAssetHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
+    const parsedBase64Data = parseOptionalString(Base64Data)
+    if (Base64Data !== undefined && parsedBase64Data === undefined) {
+      res.status(400).json({ message: 'Base64Data must be a string or null' })
+      return
+    }
+
     const asset = await createAsset(req.user.userId, {
       OrderId: parseOptionalInt(OrderId),
       AssetName: AssetName.trim(),
+      Description: parsedDescription,
       PreviewImage: parsedPreviewImage,
       OwnerCompanyId: parseOptionalInt(OwnerCompanyId),
       AssetType: parsedAssetType,
       Price: parsedPrice,
       IsMarketplace: parsedIsMarketplace,
       Category: parsedCategory,
-      Industry: parsedIndustry
+      Industry: parsedIndustry,
+      Base64Data: parsedBase64Data
     })
 
     res.status(201).json({
@@ -185,7 +199,11 @@ export const createAssetHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
-    res.status(500).json({ message: 'Server error while uploading asset' })
+    res.status(500).json({
+      message: 'Server error while uploading asset',
+      error: error.message,
+      detail: error.originalError?.message // MS SQL specific detail
+    })
   }
 }
 
@@ -195,9 +213,9 @@ export const listMyAssetsHandler = async (req: AuthRequest, res: Response): Prom
       res.status(401).json({ message: 'Unauthorized' })
       return
     }
- 
+
     const assets = await listMyAssets(req.user.userId)
- 
+
     res.status(200).json({
       message: 'Get my assets successfully',
       data: assets
@@ -227,7 +245,7 @@ export const updateAssetHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
-    const { OrderId, AssetName, PreviewImage, OwnerCompanyId, AssetType, Price, IsMarketplace, Category, Industry } =
+    const { OrderId, AssetName, Description, PreviewImage, OwnerCompanyId, AssetType, Price, IsMarketplace, Category, Industry, Base64Data } =
       req.body
 
     if (OrderId !== undefined && parseOptionalInt(OrderId) === undefined) {
@@ -237,6 +255,12 @@ export const updateAssetHandler = async (req: AuthRequest, res: Response): Promi
 
     if (AssetName !== undefined && (typeof AssetName !== 'string' || AssetName.trim() === '')) {
       res.status(400).json({ message: 'AssetName must be a non-empty string' })
+      return
+    }
+
+    const parsedDescription = parseOptionalString(Description)
+    if (Description !== undefined && parsedDescription === undefined) {
+      res.status(400).json({ message: 'Description must be a string or null' })
       return
     }
 
@@ -281,16 +305,24 @@ export const updateAssetHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
+    const parsedBase64Data = parseOptionalString(Base64Data)
+    if (Base64Data !== undefined && parsedBase64Data === undefined) {
+      res.status(400).json({ message: 'Base64Data must be a string or null' })
+      return
+    }
+
     const asset = await updateAsset(assetId, {
       OrderId: parseOptionalInt(OrderId),
       AssetName: typeof AssetName === 'string' ? AssetName.trim() : undefined,
+      Description: parsedDescription,
       PreviewImage: parsedPreviewImage,
       OwnerCompanyId: parseOptionalInt(OwnerCompanyId),
       AssetType: parsedAssetType,
       Price: parsedPrice,
       IsMarketplace: parsedIsMarketplace,
       Category: parsedCategory,
-      Industry: parsedIndustry
+      Industry: parsedIndustry,
+      Base64Data: parsedBase64Data
     })
 
     res.status(200).json({

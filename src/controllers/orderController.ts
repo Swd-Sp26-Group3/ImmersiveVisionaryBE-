@@ -7,6 +7,7 @@ import {
   listOrdersForArtist,
   listOrdersForManager,
   updateOrderStatus,
+  updateOrder,
   cancelOrderForCustomer,
   getAttachmentsForOrder,
   addAttachmentToOrder,
@@ -254,7 +255,21 @@ export const updateOrderStatusHandler = async (req: AuthRequest, res: Response):
       return
     }
 
-    const { Status, ArtistId } = req.body
+    if (!req.user) {
+      res.status(401).json({ message: 'Unauthorized' })
+      return
+    }
+
+    // Security check for CUSTOMER role
+    if (req.user.roleName?.toUpperCase() === 'CUSTOMER') {
+      const order = await getOrderDetailForUser(orderId, req.user.userId, req.user.roleName)
+      if (!order) {
+        res.status(403).json({ message: 'You are not allowed to update this order' })
+        return
+      }
+    }
+
+    const { Status, ArtistId, Brief } = req.body
 
     if (typeof Status !== 'string' || !ALLOWED_ORDER_STATUSES.includes(Status as CreativeOrderStatus)) {
       res.status(400).json({
@@ -268,7 +283,7 @@ export const updateOrderStatusHandler = async (req: AuthRequest, res: Response):
       return
     }
 
-    const order = await updateOrderStatus(orderId, Status as CreativeOrderStatus, ArtistId ?? undefined)
+    const order = await updateOrderStatus(orderId, Status as CreativeOrderStatus, ArtistId ?? undefined, Brief)
 
     res.status(200).json({
       message: 'Update order status successfully',
@@ -283,6 +298,45 @@ export const updateOrderStatusHandler = async (req: AuthRequest, res: Response):
     }
 
     res.status(500).json({ message: 'Server error while updating order status' })
+  }
+}
+
+export const updateOrderHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const orderId = parseOrderId(req.params.id)
+    if (!orderId) {
+      res.status(400).json({ message: 'Order ID is invalid' })
+      return
+    }
+
+    const {
+      ProjectName,
+      ProductType,
+      Brief,
+      Budget,
+      DeliverySpeed,
+      TargetPlatform,
+      Deadline
+    } = req.body
+
+    const updates: any = {}
+    if (ProjectName !== undefined) updates.ProjectName = parseOptionalString(ProjectName)
+    if (ProductType !== undefined) updates.ProductType = parseOptionalString(ProductType)
+    if (Brief !== undefined) updates.Brief = parseOptionalString(Brief)
+    if (Budget !== undefined) updates.Budget = parseOptionalString(Budget)
+    if (DeliverySpeed !== undefined) updates.DeliverySpeed = parseOptionalString(DeliverySpeed)
+    if (TargetPlatform !== undefined) updates.TargetPlatform = parseOptionalString(TargetPlatform)
+    if (Deadline !== undefined) updates.Deadline = parseOptionalDate(Deadline)
+
+    const order = await updateOrder(orderId, updates)
+
+    res.status(200).json({
+      message: 'Update order successfully',
+      data: order
+    })
+  } catch (error: any) {
+    console.error('Error in updateOrderHandler:', error)
+    res.status(500).json({ message: 'Server error while updating order' })
   }
 }
 
@@ -376,6 +430,7 @@ export const orderController = {
   getById: getOrderDetailHandler,
   listMy: listMyOrdersHandler,
   list: listOrdersHandler,
+  update: updateOrderHandler,
   updateStatus: updateOrderStatusHandler,
   cancel: cancelOrderHandler,
   getAttachments: getAttachmentsHandler,

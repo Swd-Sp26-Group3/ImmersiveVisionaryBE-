@@ -11,7 +11,7 @@ export interface Payload {
 }
 
 // Thời gian hết hạn token
-const ACCESS_TOKEN_EXPIRES_IN = '1m'
+const ACCESS_TOKEN_EXPIRES_IN = '15m'
 const REFRESH_TOKEN_EXPIRES_IN = 7 * 24 * 60 * 60 * 1000 // 7 ngày (ms)
 
 // Hàm đăng ký user

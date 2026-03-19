@@ -7,7 +7,7 @@ import {
   type FileFormat
 } from '../services/assetVersionService'
 
-const ALLOWED_FILE_FORMATS: FileFormat[] = ['GLB', 'USDZ', 'FBX', 'WEBAR']
+const ALLOWED_FILE_FORMATS: FileFormat[] = ['GLB', 'USDZ', 'FBX', 'WEBAR', 'OBJ']
 
 const parseId = (idParam: string): number | null => {
   const id = Number(idParam)
@@ -25,7 +25,7 @@ export const uploadVersionHandler = async (req: AuthRequest, res: Response): Pro
       return
     }
 
-    const { FileFormat, FileUrl, PolyCount, TextureSize } = req.body
+    const { FileFormat, FileUrl, Base64Data, PolyCount, TextureSize } = req.body
 
     if (!FileFormat || !ALLOWED_FILE_FORMATS.includes(FileFormat as FileFormat)) {
       res.status(400).json({ message: `FileFormat is required and must be one of: ${ALLOWED_FILE_FORMATS.join(', ')}` })
@@ -34,6 +34,11 @@ export const uploadVersionHandler = async (req: AuthRequest, res: Response): Pro
 
     if (FileUrl !== undefined && FileUrl !== null && typeof FileUrl !== 'string') {
       res.status(400).json({ message: 'FileUrl must be a string or null' })
+      return
+    }
+
+    if (Base64Data !== undefined && Base64Data !== null && typeof Base64Data !== 'string') {
+      res.status(400).json({ message: 'Base64Data must be a string or null' })
       return
     }
 
@@ -50,6 +55,7 @@ export const uploadVersionHandler = async (req: AuthRequest, res: Response): Pro
     const version = await createAssetVersion(assetId, {
       FileFormat: FileFormat as FileFormat,
       FileUrl: FileUrl ?? null,
+      Base64Data: Base64Data ?? null,
       PolyCount: PolyCount ?? null,
       TextureSize: TextureSize ?? null
     })

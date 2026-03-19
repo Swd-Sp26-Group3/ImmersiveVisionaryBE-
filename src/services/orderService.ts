@@ -294,7 +294,8 @@ export const listOrdersForManager = async (): Promise<CreativeOrderDetail[]> => 
 export const updateOrderStatus = async (
   orderId: number,
   status: CreativeOrderStatus,
-  artistId?: number
+  artistId?: number,
+  brief?: string
 ): Promise<CreativeOrder> => {
   const pool = await getDbPool()
   const transaction = new sql.Transaction(pool)
@@ -305,10 +306,13 @@ export const updateOrderStatus = async (
     const result = await request
       .input('OrderId', sql.Int, orderId)
       .input('Status', sql.NVarChar(50), status)
+      .input('Brief', sql.NVarChar(sql.MAX), brief ?? null)
       .input('UpdatedAt', sql.DateTime, new Date())
       .query(`
         UPDATE [CreativeOrder]
-        SET Status = @Status, UpdatedAt = @UpdatedAt
+        SET Status = @Status, 
+            UpdatedAt = @UpdatedAt
+            ${brief !== undefined ? ', Brief = @Brief' : ''}
         OUTPUT INSERTED.*
         WHERE OrderId = @OrderId AND IsDeleted = 0
       `)
@@ -318,6 +322,69 @@ export const updateOrderStatus = async (
     }
 
     const order = result.recordset[0]
+
+    // Automation: If status is DELIVERED (Approved by customer), create a MarketplaceOrder (Purchase) record
+    // so it shows up in the customer's Purchases tab.
+    if (status === 'DELIVERED') {
+      try {
+        // 1. Get final .obj attachment
+        const attRes = await request.input('CompOrderId', sql.Int, orderId).query(`
+          SELECT TOP 1 FileName, Base64Data 
+          FROM OrderAttachment 
+          WHERE OrderId = @CompOrderId AND FileName LIKE '%.obj'
+          ORDER BY CreatedAt DESC
+        `)
+        const finalAtt = attRes.recordset[0]
+
+        if (finalAtt) {
+          // 2. Extract price from Budget (e.g. "5000000 VND" -> 5000000)
+          const budgetStr = order.Budget || "0"
+          const numericPrice = parseFloat(budgetStr.replace(/[^0-9.]/g, '')) || 0
+
+          // 3. Get Seller (Artist) from ProductionStage
+          const psRes = await request.query(`
+            SELECT TOP 1 AssignedTo FROM ProductionStage WHERE OrderId = @CompOrderId
+          `)
+          const sellerId = psRes.recordset[0]?.AssignedTo
+
+          if (sellerId) {
+            // 4. Create Asset3D for this delivery
+            const assetRes = await request
+              .input('AssetName', sql.NVarChar(200), order.ProjectName || `Result for #${orderId}`)
+              .input('AssetOwnerId', sql.Int, order.CompanyId)
+              .input('CreatedByArtist', sql.Int, sellerId)
+              .input('AssetPrice', sql.Decimal(18, 2), numericPrice)
+              .input('AssetBase64', sql.VarChar(sql.MAX), finalAtt.Base64Data)
+              .query(`
+                INSERT INTO [Asset3D] (OrderId, AssetName, OwnerCompanyId, CreatedBy, AssetType, Price, Base64Data, PublishStatus, IsMarketplace)
+                OUTPUT INSERTED.AssetId
+                VALUES (@CompOrderId, @AssetName, @AssetOwnerId, @CreatedByArtist, 'ORDER', @AssetPrice, @AssetBase64, 'PUBLISHED', 0)
+              `)
+            const newAssetId = assetRes.recordset[0].AssetId
+
+            // 5. Create MarketplaceOrder (INTERNAL)
+            // Get SellerCompanyId for the artist
+            const sellerCompRes = await request.input('ArtistUserId', sql.Int, sellerId).query(`
+              SELECT CompanyId FROM [User] WHERE UserId = @ArtistUserId
+            `)
+            const sellerCompanyId = sellerCompRes.recordset[0]?.CompanyId || 1 // Fallback to system company
+
+            await request
+              .input('MpAssetId', sql.Int, newAssetId)
+              .input('MpBuyerCompanyId', sql.Int, order.CompanyId)
+              .input('MpSellerCompanyId', sql.Int, sellerCompanyId)
+              .input('MpPrice', sql.Decimal(18, 2), numericPrice)
+              .query(`
+                INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, SellerCompanyId, Price, Status)
+                VALUES (@MpAssetId, @MpBuyerCompanyId, @MpSellerCompanyId, @MpPrice, 'PENDING')
+              `)
+          }
+        }
+      } catch (err) {
+        console.error('Order-to-Purchase Automation Warning:', err)
+        // We don't fail the whole status update if automation fails, but we log it.
+      }
+    }
 
     // Nếu status là IN_PRODUCTION và có artistId, tạo ProductionStage
     if (status === 'IN_PRODUCTION' && artistId) {
@@ -349,6 +416,86 @@ export const updateOrderStatus = async (
     await transaction.rollback()
     throw error
   }
+}
+
+
+export const updateOrder = async (
+  orderId: number,
+  updates: Partial<Pick<CreativeOrder, 'ProjectName' | 'ProductType' | 'Brief' | 'Budget' | 'DeliverySpeed' | 'TargetPlatform' | 'Deadline'>>
+): Promise<CreativeOrder> => {
+  const pool = await getDbPool()
+  const updatedAt = new Date()
+
+  let updateFields = ''
+  const request = pool.request()
+  request.input('OrderId', sql.Int, orderId)
+  request.input('UpdatedAt', sql.DateTime, updatedAt)
+
+  Object.entries(updates).forEach(([key, value]) => {
+    if (value !== undefined) {
+      updateFields += `, ${key} = @${key}`
+      if (key === 'Deadline' && value !== null) {
+        request.input(key, sql.DateTime, value)
+      } else {
+        request.input(key, sql.NVarChar, value)
+      }
+    }
+  })
+
+  if (!updateFields) {
+    throw new Error('No fields provided for update')
+  }
+
+  const result = await request.query(`
+    UPDATE [CreativeOrder]
+    SET UpdatedAt = @UpdatedAt
+        ${updateFields}
+    OUTPUT INSERTED.*
+    WHERE OrderId = @OrderId AND IsDeleted = 0
+  `)
+
+  if (result.recordset.length === 0) {
+    throw new Error('Order not found or update failed')
+  }
+
+  const updatedOrder = result.recordset[0]
+
+  // IF Budget was updated, we need to sync it to Asset3D and MarketplaceOrder (if they exist)
+  if (updates.Budget !== undefined) {
+    try {
+      const budgetStr = updates.Budget || "0"
+      const numericPrice = parseFloat(budgetStr.replace(/[^0-9.]/g, '')) || 0
+
+      // Update Asset3D price
+      const assetRes = await pool.request()
+        .input('OrderId', sql.Int, orderId)
+        .input('NewPrice', sql.Decimal(18, 2), numericPrice)
+        .query(`
+          UPDATE [Asset3D]
+          SET Price = @NewPrice
+          OUTPUT INSERTED.AssetId
+          WHERE OrderId = @OrderId
+        `)
+
+      if (assetRes.recordset.length > 0) {
+        const assetId = assetRes.recordset[0].AssetId
+        // Update MarketplaceOrder price
+        await pool.request()
+          .input('AssetId', sql.Int, assetId)
+          .input('NewPrice', sql.Decimal(18, 2), numericPrice)
+          .query(`
+            UPDATE [MarketplaceOrder]
+            SET Price = @NewPrice
+            WHERE AssetId = @AssetId AND Status = 'PENDING'
+          `)
+      }
+    } catch (err) {
+      console.error('Price Sync Warning:', err)
+      // Non-blocking but we log it
+    }
+  }
+
+  return updatedOrder
 }
 
 export const cancelOrderForCustomer = async (orderId: number, userId: number): Promise<CreativeOrder> => {

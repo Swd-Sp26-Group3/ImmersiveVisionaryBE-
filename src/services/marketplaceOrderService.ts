@@ -118,6 +118,34 @@ export const createMarketplaceOrder = async (
   return result.recordset[0]
 }
 
+/**
+ * Creates a MarketplaceOrder for internal use (e.g. from a custom CreativeOrder completion)
+ * Bypasses public marketplace visibility checks.
+ */
+export const createInternalMarketplaceOrder = async (
+  assetId: number,
+  buyerCompanyId: number,
+  sellerCompanyId: number,
+  price: number | null
+): Promise<MarketplaceOrder> => {
+  const pool = await getDbPool()
+
+  const result = await pool
+    .request()
+    .input('AssetId', sql.Int, assetId)
+    .input('BuyerCompanyId', sql.Int, buyerCompanyId)
+    .input('SellerCompanyId', sql.Int, sellerCompanyId)
+    .input('Price', sql.Decimal(18, 2), price)
+    .input('Status', sql.NVarChar(50), 'PENDING')
+    .query(`
+      INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, SellerCompanyId, Price, Status)
+      OUTPUT INSERTED.*
+      VALUES (@AssetId, @BuyerCompanyId, @SellerCompanyId, @Price, @Status)
+    `)
+
+  return result.recordset[0]
+}
+
 export const listMyPurchases = async (userId: number): Promise<MarketplaceOrder[]> => {
   const buyerCompanyId = await getUserCompanyId(userId)
 

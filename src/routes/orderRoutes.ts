@@ -11,4 +11,7 @@ router.get('/:id', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTO
 router.put('/:id/status', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST']), orderController.updateStatus)
 router.put('/:id/cancel', authenticate, authorize(['ADMIN', 'CUSTOMER']), orderController.cancel)
 
+router.get('/:id/attachments', authenticate, authorize(['ADMIN', 'MANAGER', 'ARTIST', 'CUSTOMER']), orderController.getAttachments)
+router.post('/:id/attachments', authenticate, authorize(['ADMIN', 'ARTIST']), orderController.addAttachment)
+
 export default router

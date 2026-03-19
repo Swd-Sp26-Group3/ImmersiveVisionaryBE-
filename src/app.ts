@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit'
 import { config } from './config/config'
 import { connectToDatabase, createDefaultAdmin } from './config/database'
 
-import  authRoutes  from './routes/authRoutes'
+import authRoutes from './routes/authRoutes'
 import { adminRoutes } from './routes/adminRoutes'
 import userRoutes from './routes/userRoutes'
 import companyRoutes from './routes/companyRoutes'
@@ -16,12 +16,14 @@ import assetRoutes from './routes/assetRoutes'
 import assetVersionRoutes from './routes/assetVersionRoutes'
 import paymentRoutes from './routes/paymentRoutes'
 import marketplaceOrderRoutes from './routes/marketplaceOrderRoutes'
+import attachmentRoutes from './routes/attachmentRoutes'
 
 // Import routes
 
 
 const app = express()
-app.use(express.json())
+app.use(express.json({ limit: '50mb' }))
+app.use(express.urlencoded({ limit: '50mb', extended: true }))
 
 
 app.use(helmet())
@@ -59,6 +61,7 @@ app.use('/api/assets', assetRoutes)
 app.use('/api/asset-versions', assetVersionRoutes)
 app.use('/api/payments', paymentRoutes)
 app.use('/api/marketplace-orders', marketplaceOrderRoutes)
+app.use('/api/attachments', attachmentRoutes)
 
 // Initialize application
 export const initializeApp = async (): Promise<void> => {

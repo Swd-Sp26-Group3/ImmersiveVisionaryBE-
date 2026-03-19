@@ -399,3 +399,36 @@ export const cancelOrderForCustomer = async (orderId: number, userId: number): P
 
   throw new Error('ORDER_CANCEL_FAILED')
 }
+export const getAttachmentsForOrder = async (orderId: number): Promise<any[]> => {
+  const pool = await getDbPool()
+  const result = await pool.request()
+    .input('OrderId', sql.Int, orderId)
+    .query('SELECT * FROM OrderAttachment WHERE OrderId = @OrderId ORDER BY CreatedAt DESC')
+  return result.recordset
+}
+
+export const addAttachmentToOrder = async (orderId: number, attachment: { FileName: string; MimeType: string; Base64Data: string }): Promise<any> => {
+  const pool = await getDbPool()
+  const result = await pool.request()
+    .input('OrderId', sql.Int, orderId)
+    .input('FileName', sql.NVarChar(200), attachment.FileName)
+    .input('MimeType', sql.NVarChar(100), attachment.MimeType)
+    .input('Base64Data', sql.VarChar(sql.MAX), attachment.Base64Data)
+    .query(`
+      INSERT INTO OrderAttachment (OrderId, FileName, MimeType, Base64Data)
+      OUTPUT INSERTED.*
+      VALUES (@OrderId, @FileName, @MimeType, @Base64Data)
+    `)
+  return result.recordset[0]
+}
+
+export const deleteAttachment = async (attachmentId: number): Promise<void> => {
+  const pool = await getDbPool()
+  const result = await pool.request()
+    .input('AttachmentId', sql.Int, attachmentId)
+    .query('DELETE FROM OrderAttachment WHERE AttachmentId = @AttachmentId')
+
+  if (result.rowsAffected[0] === 0) {
+    throw new Error('ATTACHMENT_NOT_FOUND')
+  }
+}

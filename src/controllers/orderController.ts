@@ -8,6 +8,9 @@ import {
   listOrdersForManager,
   updateOrderStatus,
   cancelOrderForCustomer,
+  getAttachmentsForOrder,
+  addAttachmentToOrder,
+  deleteAttachment,
   type CreativeOrderStatus
 } from '../services/orderService'
 
@@ -329,13 +332,55 @@ export const cancelOrderHandler = async (req: AuthRequest, res: Response): Promi
   }
 }
 
+export const getAttachmentsHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const orderId = parseOrderId(req.params.id)
+    if (!orderId) { res.status(400).json({ message: 'Order ID is invalid' }); return }
+    const attachments = await getAttachmentsForOrder(orderId)
+    res.status(200).json({ message: 'Get attachments successfully', data: attachments })
+  } catch (error) {
+    console.error('Error in getAttachmentsHandler:', error)
+    res.status(500).json({ message: 'Server error while getting attachments' })
+  }
+}
+
+export const addAttachmentHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const orderId = parseOrderId(req.params.id)
+    if (!orderId) { res.status(400).json({ message: 'Order ID is invalid' }); return }
+    const { FileName, MimeType, Base64Data } = req.body
+    if (!FileName || !Base64Data) { res.status(400).json({ message: 'FileName and Base64Data are required' }); return }
+    const attachment = await addAttachmentToOrder(orderId, { FileName, MimeType, Base64Data })
+    res.status(201).json({ message: 'Add attachment successfully', data: attachment })
+  } catch (error) {
+    console.error('Error in addAttachmentHandler:', error)
+    res.status(500).json({ message: 'Server error while adding attachment' })
+  }
+}
+
+export const deleteAttachmentHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const attachmentId = parseOrderId(req.params.id)
+    if (!attachmentId) { res.status(400).json({ message: 'Attachment ID is invalid' }); return }
+    await deleteAttachment(attachmentId)
+    res.status(200).json({ message: 'Delete attachment successfully' })
+  } catch (error: any) {
+    console.error('Error in deleteAttachmentHandler:', error)
+    if (error.message === 'ATTACHMENT_NOT_FOUND') { res.status(404).json({ message: 'Attachment not found' }); return }
+    res.status(500).json({ message: 'Server error while deleting attachment' })
+  }
+}
+
 export const orderController = {
   create: createOrderHandler,
   getById: getOrderDetailHandler,
   listMy: listMyOrdersHandler,
   list: listOrdersHandler,
   updateStatus: updateOrderStatusHandler,
-  cancel: cancelOrderHandler
+  cancel: cancelOrderHandler,
+  getAttachments: getAttachmentsHandler,
+  addAttachment: addAttachmentHandler,
+  deleteAttachment: deleteAttachmentHandler
 }
 
 export default orderController

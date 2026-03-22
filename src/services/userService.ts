@@ -252,3 +252,35 @@ export const approveBusinessAccount = async (userId: number): Promise<UserProfil
 
   return await getUserProfile(userId)
 }
+
+// Cập nhật role của user
+export const updateUserRole = async (userId: number, roleName: string): Promise<UserProfile | null> => {
+  const pool = await getDbPool()
+
+  const roleResult = await pool.request().input('roleName', roleName).query(`
+    SELECT RoleId FROM [Role] WHERE RoleName = @roleName
+  `)
+
+  if (roleResult.recordset.length === 0) {
+    throw new Error(`Role ${roleName} không tồn tại`)
+  }
+
+  const roleId = roleResult.recordset[0].RoleId
+
+  const updateResult = await pool
+    .request()
+    .input('userId', userId)
+    .input('roleId', roleId)
+    .input('updatedAt', new Date())
+    .query(`
+      UPDATE [User]
+      SET RoleId = @roleId, UpdatedAt = @updatedAt
+      WHERE UserId = @userId AND IsDeleted = 0
+    `)
+
+  if (updateResult.rowsAffected[0] === 0) {
+    throw new Error('User không tồn tại')
+  }
+
+  return await getUserProfile(userId)
+}

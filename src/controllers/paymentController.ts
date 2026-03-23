@@ -43,7 +43,7 @@ export const createPaymentHandler = async (req: AuthRequest, res: Response): Pro
       return
     }
 
-    const { OrderId, AssetId, CompanyId, Amount, PaymentType } = req.body
+    const { OrderId, AssetId, MpOrderId, CompanyId, Amount, PaymentType } = req.body
 
     if (Amount === undefined || Amount === null || typeof Amount !== 'number' || Amount <= 0) {
       res.status(400).json({ message: 'Amount is required and must be a positive number' })
@@ -57,6 +57,11 @@ export const createPaymentHandler = async (req: AuthRequest, res: Response): Pro
 
     if (AssetId !== undefined && AssetId !== null && (!Number.isInteger(AssetId) || AssetId <= 0)) {
       res.status(400).json({ message: 'AssetId must be a positive integer or null' })
+      return
+    }
+
+    if (MpOrderId !== undefined && MpOrderId !== null && (!Number.isInteger(MpOrderId) || MpOrderId <= 0)) {
+      res.status(400).json({ message: 'MpOrderId must be a positive integer or null' })
       return
     }
 
@@ -86,6 +91,7 @@ export const createPaymentHandler = async (req: AuthRequest, res: Response): Pro
     const payment = await createPayment({
       OrderId: OrderId ?? null,
       AssetId: AssetId ?? null,
+      MpOrderId: MpOrderId ?? null,
       CompanyId: resolvedCompanyId,
       Amount,
       PaymentType: PaymentType ?? null

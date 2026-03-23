@@ -48,6 +48,16 @@ async function runMigration() {
     `)
     console.log('Created OrderAttachment table')
 
+    await pool.query(`
+      -- 1E. Add MpOrderId to Payment table
+      IF NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'MpOrderId' AND Object_ID = Object_ID(N'Payment'))
+      BEGIN
+          ALTER TABLE Payment ADD MpOrderId INT NULL;
+          ALTER TABLE Payment ADD CONSTRAINT FK_Payment_MarketplaceOrder FOREIGN KEY (MpOrderId) REFERENCES MarketplaceOrder(MpOrderId);
+      END
+    `)
+    console.log('Added MpOrderId to Payment table')
+
     console.log('Migration successful!')
   } catch (error) {
     console.error('Migration failed:', error)

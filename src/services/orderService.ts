@@ -143,7 +143,8 @@ export const createOrder = async (
           .input('FileName', sql.NVarChar(200), att.FileName)
           .input('MimeType', sql.NVarChar(100), att.MimeType)
           .input('Base64Data', sql.VarChar(sql.MAX), att.Base64Data)
-          .query('INSERT INTO OrderAttachment (OrderId, FileName, MimeType, Base64Data) VALUES (@OrderId, @FileName, @MimeType, @Base64Data)')
+          .input('FileData', sql.VarChar(sql.MAX), att.Base64Data)
+          .query('INSERT INTO OrderAttachment (OrderId, FileName, MimeType, Base64Data, FileData) VALUES (@OrderId, @FileName, @MimeType, @Base64Data, @FileData)')
       }
     }
 

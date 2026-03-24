@@ -1,5 +1,6 @@
 import type { Response } from 'express'
 import type { AuthRequest } from '../middlewares/authMiddleware'
+import fs from 'fs'
 import {
   createOrder,
   getOrderDetailForUser,
@@ -153,6 +154,9 @@ export const createOrderHandler = async (req: AuthRequest, res: Response): Promi
     })
   } catch (error: any) {
     console.error('Error in createOrderHandler:', error)
+    try {
+      fs.writeFileSync('error_log.txt', String(error?.stack || error?.message || error) + '\nInner: ' + JSON.stringify(error))
+    } catch(e) {}
 
     if (error.message === 'USER_COMPANY_NOT_FOUND') {
       res.status(400).json({ message: 'User is not associated with any company' })

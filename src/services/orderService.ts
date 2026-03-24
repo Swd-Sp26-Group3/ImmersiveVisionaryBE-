@@ -19,6 +19,7 @@ export interface CreativeOrder {
   MultiVariant: boolean
   SourceFiles: boolean
   Status: CreativeOrderStatus
+  CreatedByUserId: number | null
   Deadline: Date | null
   CreatedAt: Date
   UpdatedAt: Date | null
@@ -29,6 +30,8 @@ export interface CreativeOrderDetail extends CreativeOrder {
   CompanyName: string | null
   ProductName: string | null
   PackageName: string | null
+  BuyerName?: string | null
+  BuyerPhone?: string | null
 }
 
 export interface CreateOrderInput {
@@ -45,6 +48,7 @@ export interface CreateOrderInput {
   Animation?: boolean
   MultiVariant?: boolean
   SourceFiles?: boolean
+  CreatedByUserId?: number | null
   Deadline?: Date | null
   Attachments?: { FileName: string; MimeType: string; Base64Data: string }[]
 }
@@ -122,14 +126,15 @@ export const createOrder = async (
       .input('MultiVariant', sql.Bit, payload.MultiVariant ? 1 : 0)
       .input('SourceFiles', sql.Bit, payload.SourceFiles ? 1 : 0)
       .input('Status', sql.NVarChar(50), 'NEW')
+      .input('CreatedByUserId', sql.Int, userId)
       .input('Deadline', sql.DateTime, payload.Deadline ?? null)
       .query(`
         INSERT INTO [CreativeOrder] (
-          CompanyId, ProductId, PackageId, ProjectName, ProductType, Brief, Budget, DeliverySpeed, TargetPlatform, ArOptimize, Animation, MultiVariant, SourceFiles, Status, Deadline
+          CompanyId, ProductId, PackageId, ProjectName, ProductType, Brief, Budget, DeliverySpeed, TargetPlatform, ArOptimize, Animation, MultiVariant, SourceFiles, Status, CreatedByUserId, Deadline
         )
         OUTPUT INSERTED.*
         VALUES (
-          @CompanyId, @ProductId, @PackageId, @ProjectName, @ProductType, @Brief, @Budget, @DeliverySpeed, @TargetPlatform, @ArOptimize, @Animation, @MultiVariant, @SourceFiles, @Status, @Deadline
+          @CompanyId, @ProductId, @PackageId, @ProjectName, @ProductType, @Brief, @Budget, @DeliverySpeed, @TargetPlatform, @ArOptimize, @Animation, @MultiVariant, @SourceFiles, @Status, @CreatedByUserId, @Deadline
         )
       `)
 
@@ -159,17 +164,20 @@ export const getOrderDetailById = async (orderId: number): Promise<CreativeOrder
   const pool = await getDbPool()
 
   const result = await pool.request().input('OrderId', sql.Int, orderId).query(`
-    SELECT
-      o.*,
-      c.CompanyName,
-      p.ProductName,
-      sp.PackageName
-    FROM [CreativeOrder] o
-    LEFT JOIN [Company] c ON o.CompanyId = c.CompanyId
-    LEFT JOIN [Product] p ON o.ProductId = p.ProductId
-    LEFT JOIN [ServicePackage] sp ON o.PackageId = sp.PackageId
-    WHERE o.OrderId = @OrderId AND o.IsDeleted = 0
-  `)
+      SELECT
+        o.*,
+        c.CompanyName,
+        p.ProductName,
+        sp.PackageName,
+        u.UserName as BuyerName,
+        u.Phone as BuyerPhone
+      FROM [CreativeOrder] o
+      LEFT JOIN [Company] c ON o.CompanyId = c.CompanyId
+      LEFT JOIN [Product] p ON o.ProductId = p.ProductId
+      LEFT JOIN [ServicePackage] sp ON o.PackageId = sp.PackageId
+      LEFT JOIN [User] u ON o.CreatedByUserId = u.UserId
+      WHERE o.OrderId = @OrderId AND o.IsDeleted = 0
+    `)
 
   if (result.recordset.length === 0) {
     return null
@@ -255,18 +263,21 @@ export const listMyOrders = async (userId: number): Promise<CreativeOrderDetail[
   const pool = await getDbPool()
 
   const result = await pool.request().input('CompanyId', sql.Int, companyId).query(`
-    SELECT
-      o.*,
-      c.CompanyName,
-      p.ProductName,
-      sp.PackageName
-    FROM [CreativeOrder] o
-    LEFT JOIN [Company] c ON o.CompanyId = c.CompanyId
-    LEFT JOIN [Product] p ON o.ProductId = p.ProductId
-    LEFT JOIN [ServicePackage] sp ON o.PackageId = sp.PackageId
-    WHERE o.CompanyId = @CompanyId AND o.IsDeleted = 0
-    ORDER BY o.CreatedAt DESC
-  `)
+      SELECT
+        o.*,
+        c.CompanyName,
+        p.ProductName,
+        sp.PackageName,
+        u.UserName as BuyerName,
+        u.Phone as BuyerPhone
+      FROM [CreativeOrder] o
+      LEFT JOIN [Company] c ON o.CompanyId = c.CompanyId
+      LEFT JOIN [Product] p ON o.ProductId = p.ProductId
+      LEFT JOIN [ServicePackage] sp ON o.PackageId = sp.PackageId
+      LEFT JOIN [User] u ON o.CreatedByUserId = u.UserId
+      WHERE o.CompanyId = @CompanyId AND o.IsDeleted = 0
+      ORDER BY o.CreatedAt DESC
+    `)
 
   return result.recordset
 }
@@ -275,18 +286,20 @@ export const listOrdersForManager = async (): Promise<CreativeOrderDetail[]> => 
   const pool = await getDbPool()
 
   const result = await pool.request().query(`
-    SELECT
-      o.*,
-      c.CompanyName,
-      p.ProductName,
-      sp.PackageName
-    FROM [CreativeOrder] o
-    LEFT JOIN [Company] c ON o.CompanyId = c.CompanyId
-    LEFT JOIN [Product] p ON o.ProductId = p.ProductId
-    LEFT JOIN [ServicePackage] sp ON o.PackageId = sp.PackageId
-    WHERE o.IsDeleted = 0
-    ORDER BY o.CreatedAt DESC
-  `)
+      SELECT
+        o.*,
+        c.CompanyName,
+        p.ProductName,
+        sp.PackageName,
+        u.UserName as BuyerName
+      FROM [CreativeOrder] o
+      LEFT JOIN [Company] c ON o.CompanyId = c.CompanyId
+      LEFT JOIN [Product] p ON o.ProductId = p.ProductId
+      LEFT JOIN [ServicePackage] sp ON o.PackageId = sp.PackageId
+      LEFT JOIN [User] u ON o.CreatedByUserId = u.UserId
+      WHERE o.IsDeleted = 0
+      ORDER BY o.CreatedAt DESC
+    `)
 
   return result.recordset
 }
@@ -372,11 +385,12 @@ export const updateOrderStatus = async (
             await request
               .input('MpAssetId', sql.Int, newAssetId)
               .input('MpBuyerCompanyId', sql.Int, order.CompanyId)
+              .input('MpBuyerUserId', sql.Int, order.CreatedByUserId)
               .input('MpSellerCompanyId', sql.Int, sellerCompanyId)
               .input('MpPrice', sql.Decimal(18, 2), numericPrice)
               .query(`
-                INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, SellerCompanyId, Price, Status)
-                VALUES (@MpAssetId, @MpBuyerCompanyId, @MpSellerCompanyId, @MpPrice, 'PENDING')
+                INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, BuyerUserId, SellerCompanyId, Price, Status)
+                VALUES (@MpAssetId, @MpBuyerCompanyId, @MpBuyerUserId, @MpSellerCompanyId, @MpPrice, 'PENDING')
               `)
           }
         }

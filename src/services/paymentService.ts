@@ -22,6 +22,8 @@ export interface Payment {
   AssetName?: string | null
   OrderStatus?: string | null
   MpOrderStatus?: string | null
+  BuyerName?: string | null
+  BuyerPhone?: string | null
 }
 
 export interface CreatePaymentInput {
@@ -95,12 +97,16 @@ export const getPaymentById = async (paymentId: number): Promise<Payment | null>
         o.ProjectName, 
         o.Status as OrderStatus,
         a.AssetName,
-        mo.Status as MpOrderStatus
+        mo.Status as MpOrderStatus,
+        COALESCE(bu.UserName, ou.UserName) as BuyerName,
+        COALESCE(bu.Phone, ou.Phone) as BuyerPhone
       FROM [Payment] p
       LEFT JOIN [Company] c ON p.CompanyId = c.CompanyId
       LEFT JOIN [CreativeOrder] o ON p.OrderId = o.OrderId
       LEFT JOIN [Asset3D] a ON p.AssetId = a.AssetId
       LEFT JOIN [MarketplaceOrder] mo ON p.MpOrderId = mo.MpOrderId
+      LEFT JOIN [User] bu ON mo.BuyerUserId = bu.UserId
+      LEFT JOIN [User] ou ON o.CreatedByUserId = ou.UserId
       WHERE p.PaymentId = @PaymentId
     `)
 
@@ -125,12 +131,16 @@ export const listPayments = async (companyId?: number): Promise<Payment[]> => {
         o.ProjectName, 
         o.Status as OrderStatus,
         a.AssetName,
-        mo.Status as MpOrderStatus
+        mo.Status as MpOrderStatus,
+        COALESCE(bu.UserName, ou.UserName) as BuyerName,
+        COALESCE(bu.Phone, ou.Phone) as BuyerPhone
       FROM [Payment] p
       LEFT JOIN [Company] c ON p.CompanyId = c.CompanyId
       LEFT JOIN [CreativeOrder] o ON p.OrderId = o.OrderId
       LEFT JOIN [Asset3D] a ON p.AssetId = a.AssetId
       LEFT JOIN [MarketplaceOrder] mo ON p.MpOrderId = mo.MpOrderId
+      LEFT JOIN [User] bu ON mo.BuyerUserId = bu.UserId
+      LEFT JOIN [User] ou ON o.CreatedByUserId = ou.UserId
     `
 
     if (companyId !== undefined) {

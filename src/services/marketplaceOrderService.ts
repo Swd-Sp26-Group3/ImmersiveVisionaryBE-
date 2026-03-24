@@ -7,6 +7,7 @@ export interface MarketplaceOrder {
   MpOrderId: number
   AssetId: number
   BuyerCompanyId: number
+  BuyerUserId: number | null
   SellerCompanyId: number
   Price: number | null
   Status: MarketplaceOrderStatus | null
@@ -14,11 +15,14 @@ export interface MarketplaceOrder {
   AssetName?: string | null
   BuyerCompanyName?: string | null
   SellerCompanyName?: string | null
+  BuyerName?: string | null
+  BuyerPhone?: string | null
 }
 
 export interface CreateMarketplaceOrderInput {
   AssetId: number
   BuyerCompanyId?: number
+  BuyerUserId?: number
 }
 
 const getUserCompanyId = async (userId: number): Promise<number | null> => {
@@ -106,13 +110,14 @@ export const createMarketplaceOrder = async (
     .request()
     .input('AssetId', sql.Int, payload.AssetId)
     .input('BuyerCompanyId', sql.Int, buyerCompanyId)
+    .input('BuyerUserId', sql.Int, userId)
     .input('SellerCompanyId', sql.Int, asset.OwnerCompanyId)
     .input('Price', sql.Decimal(18, 2), asset.Price)
     .input('Status', sql.NVarChar(50), 'PENDING')
     .query(`
-      INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, SellerCompanyId, Price, Status)
+      INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, BuyerUserId, SellerCompanyId, Price, Status)
       OUTPUT INSERTED.*
-      VALUES (@AssetId, @BuyerCompanyId, @SellerCompanyId, @Price, @Status)
+      VALUES (@AssetId, @BuyerCompanyId, @BuyerUserId, @SellerCompanyId, @Price, @Status)
     `)
 
   return result.recordset[0]
@@ -125,6 +130,7 @@ export const createMarketplaceOrder = async (
 export const createInternalMarketplaceOrder = async (
   assetId: number,
   buyerCompanyId: number,
+  buyerUserId: number | null,
   sellerCompanyId: number,
   price: number | null
 ): Promise<MarketplaceOrder> => {
@@ -134,13 +140,14 @@ export const createInternalMarketplaceOrder = async (
     .request()
     .input('AssetId', sql.Int, assetId)
     .input('BuyerCompanyId', sql.Int, buyerCompanyId)
+    .input('BuyerUserId', sql.Int, buyerUserId)
     .input('SellerCompanyId', sql.Int, sellerCompanyId)
     .input('Price', sql.Decimal(18, 2), price)
     .input('Status', sql.NVarChar(50), 'PENDING')
     .query(`
-      INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, SellerCompanyId, Price, Status)
+      INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, BuyerUserId, SellerCompanyId, Price, Status)
       OUTPUT INSERTED.*
-      VALUES (@AssetId, @BuyerCompanyId, @SellerCompanyId, @Price, @Status)
+      VALUES (@AssetId, @BuyerCompanyId, @BuyerUserId, @SellerCompanyId, @Price, @Status)
     `)
 
   return result.recordset[0]
@@ -159,10 +166,12 @@ export const listMyPurchases = async (userId: number): Promise<MarketplaceOrder[
     .request()
     .input('BuyerCompanyId', sql.Int, buyerCompanyId)
     .query(`
-      SELECT *
-      FROM [MarketplaceOrder]
-      WHERE BuyerCompanyId = @BuyerCompanyId
-      ORDER BY MpOrderId DESC
+      SELECT mo.*, bu.UserName as BuyerName, bu.Phone as BuyerPhone, a.AssetName
+      FROM [MarketplaceOrder] mo
+      LEFT JOIN [User] bu ON mo.BuyerUserId = bu.UserId
+      LEFT JOIN [Asset3D] a ON mo.AssetId = a.AssetId
+      WHERE mo.BuyerCompanyId = @BuyerCompanyId
+      ORDER BY mo.MpOrderId DESC
     `)
 
   return result.recordset
@@ -172,20 +181,17 @@ export const listAllMarketplaceOrders = async (): Promise<MarketplaceOrder[]> =>
   const pool = await getDbPool()
   const result = await pool.request().query(`
     SELECT
-      mo.MpOrderId,
-      mo.AssetId,
-      mo.BuyerCompanyId,
-      mo.SellerCompanyId,
-      mo.Price,
-      mo.Status,
-      mo.CreatedAt,
+      mo.*,
       a.AssetName,
       bc.CompanyName AS BuyerCompanyName,
-      sc.CompanyName AS SellerCompanyName
+      sc.CompanyName AS SellerCompanyName,
+      bu.UserName AS BuyerName,
+      bu.Phone AS BuyerPhone
     FROM [MarketplaceOrder] mo
     LEFT JOIN Asset3D  a   ON mo.AssetId         = a.AssetId
     LEFT JOIN Company  bc  ON mo.BuyerCompanyId  = bc.CompanyId
     LEFT JOIN Company  sc  ON mo.SellerCompanyId = sc.CompanyId
+    LEFT JOIN [User]   bu  ON mo.BuyerUserId      = bu.UserId
     ORDER BY mo.CreatedAt DESC
   `)
   return result.recordset
@@ -201,9 +207,10 @@ export const getMarketplaceOrderDetail = async (
 
   if (normalizedRole === 'ADMIN' || normalizedRole === 'MANAGER') {
     const result = await pool.request().input('MpOrderId', sql.Int, mpOrderId).query(`
-      SELECT *
-      FROM [MarketplaceOrder]
-      WHERE MpOrderId = @MpOrderId
+      SELECT mo.*, bu.UserName as BuyerName, bu.Phone as BuyerPhone
+      FROM [MarketplaceOrder] mo
+      LEFT JOIN [User] bu ON mo.BuyerUserId = bu.UserId
+      WHERE mo.MpOrderId = @MpOrderId
     `)
 
     return result.recordset[0] ?? null
@@ -219,9 +226,10 @@ export const getMarketplaceOrderDetail = async (
     .input('MpOrderId', sql.Int, mpOrderId)
     .input('BuyerCompanyId', sql.Int, buyerCompanyId)
     .query(`
-      SELECT *
-      FROM [MarketplaceOrder]
-      WHERE MpOrderId = @MpOrderId AND BuyerCompanyId = @BuyerCompanyId
+      SELECT mo.*, bu.UserName as BuyerName, bu.Phone as BuyerPhone
+      FROM [MarketplaceOrder] mo
+      LEFT JOIN [User] bu ON mo.BuyerUserId = bu.UserId
+      WHERE mo.MpOrderId = @MpOrderId AND mo.BuyerCompanyId = @BuyerCompanyId
     `)
 
   return result.recordset[0] ?? null

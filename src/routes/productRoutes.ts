@@ -8,6 +8,6 @@ router.post('/', authenticate, authorize(['ADMIN', 'MANAGER', 'SELLER']), produc
 router.put('/:id', authenticate, authorize(['ADMIN', 'MANAGER', 'SELLER']), productController.update)
 router.delete('/:id', authenticate, authorize(['ADMIN', 'MANAGER', 'SELLER']), productController.delete)
 router.get('/:id', productController.getById)
-router.get('/', productController.list) 
+router.get('/', productController.list)
 
 export default router

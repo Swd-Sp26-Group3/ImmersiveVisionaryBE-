@@ -128,6 +128,24 @@ class AdminService {
     return updatedUser.recordset[0]
   }
 
+  // Role Management
+  async getRoles(): Promise<{ RoleId: number; RoleName: string }[]> {
+    const pool = await getDbPool()
+
+    try {
+      const result = await pool.request().query(`
+        SELECT RoleId, RoleName 
+        FROM [Role]
+        ORDER BY RoleId ASC
+      `)
+
+      return result.recordset
+    } catch (error) {
+      console.error('Error getting roles:', error)
+      throw error
+    }
+  }
+
   // Dashboard Stats
   async getDashboardStats(): Promise<DashboardStats> {
     const pool = await getDbPool()

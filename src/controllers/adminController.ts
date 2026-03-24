@@ -14,6 +14,18 @@ getDashboardStats = asyncHandler(async (req: AuthRequest, res: Response, next: N
         }
       })
     
+    getRoles = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+        try {
+            const roles = await adminService.getRoles()
+            res.status(200).json({
+                message: 'Roles fetched successfully',
+                data: roles
+            })
+        } catch (error) {
+            next(error)
+        }
+    })
+
     promotion = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
         try {
             res.status(200).json({ message: 'Promotion created successfully' });

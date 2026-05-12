@@ -131,7 +131,9 @@ export const listMyAssets = async (createdBy: number): Promise<Asset3D[]> => {
     .request()
     .input('CreatedBy', sql.Int, createdBy)
     .query(`
-      SELECT *
+      SELECT AssetId, OrderId, AssetName, Description, PreviewImage, CreatedBy,
+             OwnerCompanyId, AssetType, Price, IsMarketplace, Category, Industry,
+             PublishStatus, CreatedAt, UpdatedAt, IsDeleted
       FROM [Asset3D]
       WHERE CreatedBy = @CreatedBy AND IsDeleted = 0
       ORDER BY CreatedAt DESC
@@ -144,7 +146,10 @@ export const listAllAssets = async (): Promise<Asset3D[]> => {
   const pool = await getDbPool()
 
   const result = await pool.request().query(`
-    SELECT * FROM [Asset3D]
+    SELECT AssetId, OrderId, AssetName, Description, PreviewImage, CreatedBy,
+           OwnerCompanyId, AssetType, Price, IsMarketplace, Category, Industry,
+           PublishStatus, CreatedAt, UpdatedAt, IsDeleted
+    FROM [Asset3D]
     WHERE IsDeleted = 0
     ORDER BY CreatedAt DESC
   `)
@@ -156,7 +161,9 @@ export const listMarketplaceAssets = async (): Promise<Asset3D[]> => {
   const pool = await getDbPool()
 
   const result = await pool.request().query(`
-    SELECT *
+    SELECT AssetId, OrderId, AssetName, Description, PreviewImage, CreatedBy,
+           OwnerCompanyId, AssetType, Price, IsMarketplace, Category, Industry,
+           PublishStatus, CreatedAt, UpdatedAt, IsDeleted
     FROM [Asset3D]
     WHERE IsDeleted = 0 AND IsMarketplace = 1 AND PublishStatus = 'PUBLISHED'
     ORDER BY CreatedAt DESC
@@ -297,29 +304,57 @@ export const submitAssetForPublish = async (assetId: number): Promise<Asset3D> =
 export const approveAsset = async (assetId: number): Promise<Asset3D> => {
   const pool = await getDbPool()
 
-  const result = await pool
+  // Fetch the asset to get CreatedBy so we can resolve OwnerCompanyId if missing
+  const assetRes = await pool
+    .request()
+    .input('AssetId', sql.Int, assetId)
+    .query(`
+      SELECT a.AssetId, a.PublishStatus, a.OwnerCompanyId, a.CreatedBy, u.CompanyId as CreatorCompanyId
+      FROM [Asset3D] a
+      LEFT JOIN [User] u ON a.CreatedBy = u.UserId
+      WHERE a.AssetId = @AssetId AND a.IsDeleted = 0
+    `)
+
+  if (assetRes.recordset.length === 0) {
+    throw new Error('ASSET_NOT_FOUND')
+  }
+
+  const asset = assetRes.recordset[0]
+
+  if (asset.PublishStatus !== 'PENDING') {
+    throw new Error('ASSET_CANNOT_APPROVE')
+  }
+
+  // Resolve OwnerCompanyId: keep existing if set, otherwise fall back to creator's company
+  const resolvedOwnerCompanyId = asset.OwnerCompanyId ?? asset.CreatorCompanyId ?? null
+
+  const request = pool
     .request()
     .input('AssetId', sql.Int, assetId)
     .input('PublishStatus', sql.NVarChar(50), 'PUBLISHED')
     .input('IsMarketplace', sql.Bit, true)
     .input('UpdatedAt', sql.DateTime, new Date())
-    .query(`
-      UPDATE [Asset3D]
-      SET PublishStatus = @PublishStatus,
-          IsMarketplace = @IsMarketplace,
-          UpdatedAt = @UpdatedAt
-      OUTPUT INSERTED.*
-      WHERE AssetId = @AssetId AND IsDeleted = 0 AND PublishStatus = 'PENDING'
-    `)
 
-  if (result.recordset.length > 0) {
-    return result.recordset[0]
+  let ownerSet = ''
+  if (resolvedOwnerCompanyId !== null) {
+    request.input('OwnerCompanyId', sql.Int, resolvedOwnerCompanyId)
+    ownerSet = ', OwnerCompanyId = @OwnerCompanyId'
   }
 
-  const existing = await getAssetById(assetId)
-  if (!existing) {
+  const result = await request.query(`
+    UPDATE [Asset3D]
+    SET PublishStatus = @PublishStatus,
+        IsMarketplace = @IsMarketplace,
+        UpdatedAt = @UpdatedAt
+        ${ownerSet}
+    OUTPUT INSERTED.*
+    WHERE AssetId = @AssetId AND IsDeleted = 0
+  `)
+
+  if (result.recordset.length === 0) {
     throw new Error('ASSET_NOT_FOUND')
   }
 
-  throw new Error('ASSET_CANNOT_APPROVE')
+  return result.recordset[0]
 }
+

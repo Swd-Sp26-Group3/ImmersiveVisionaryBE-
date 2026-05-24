@@ -17,12 +17,18 @@ const parseOrigins = (value: string, fallback: string): string | string[] => {
   return origins.length === 1 ? origins[0] : origins
 }
 
-const requiredEnv = (name: string, fallback = ''): string => {
+const requiredEnv = (name: string): string => {
   const value = process.env[name]?.trim()
 
-  if (nodeEnv === 'production' && (!value || value === fallback)) {
+  if (nodeEnv === 'production' && !value) {
     throw new Error(`Missing required environment variable: ${name}`)
   }
+
+  return value || ''
+}
+
+const optionalEnv = (name: string, fallback: string): string => {
+  const value = process.env[name]?.trim()
 
   return value || fallback
 }
@@ -31,18 +37,18 @@ export const config = {
   port: Number.parseInt(process.env.PORT || '5000'),
 
   database: {
-    server: requiredEnv('DB_SERVER', 'localhost'),
-    database: requiredEnv('DB_NAME', 'ImmersiveVisionary'),
-    user: requiredEnv('DB_USER', 'sa'),
-    password: requiredEnv('DB_PASSWORD', '12345'),
+    server: optionalEnv('DB_SERVER', 'localhost'),
+    database: optionalEnv('DB_NAME', 'ImmersiveVisionary'),
+    user: optionalEnv('DB_USER', 'sa'),
+    password: optionalEnv('DB_PASSWORD', '12345'),
     port: Number.parseInt(process.env.DB_PORT || '1433'),
     encrypt: process.env.DB_ENCRYPT ? process.env.DB_ENCRYPT === 'true' : nodeEnv === 'production',
     trustServerCertificate: process.env.DB_TRUST_CERT ? process.env.DB_TRUST_CERT === 'true' : nodeEnv !== 'production'
   },
 
   jwt: {
-    secret: requiredEnv('JWT_SECRET', 'hackhocai'),
-    refreshSecret: requiredEnv('JWT_REFRESH_SECRET', 'hackhocai'),
+    secret: optionalEnv('JWT_SECRET', 'hackhocai'),
+    refreshSecret: optionalEnv('JWT_REFRESH_SECRET', 'hackhocai'),
     expiresIn: process.env.JWT_EXPIRES_IN || '1h',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
   },
@@ -70,8 +76,8 @@ export const config = {
   // },
 
   admin: {
-    email: requiredEnv('DEFAULT_ADMIN_EMAIL', 'admin@electricvehicle.com'),
-    password: requiredEnv('DEFAULT_ADMIN_PASSWORD', 'Admin123!'),
+    email: optionalEnv('DEFAULT_ADMIN_EMAIL', 'admin@electricvehicle.com'),
+    password: optionalEnv('DEFAULT_ADMIN_PASSWORD', 'Admin123!'),
     roleName: process.env.DEFAULT_ADMIN_ROLE || 'ADMIN'
   },
 

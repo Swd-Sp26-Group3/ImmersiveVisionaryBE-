@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt'
+import bcrypt from 'bcryptjs'
 import { getDbPool } from '../config/database'
 import jwt from 'jsonwebtoken'
 import { config } from '../config/config'

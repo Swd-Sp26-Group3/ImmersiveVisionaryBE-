@@ -73,16 +73,15 @@ export const registerHandler = async (req: AuthRequest, res: Response): Promise<
 }
 
 export const loginHandler = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { Email, Password, PasswordHash } = req.body
-  const plainPassword = Password || PasswordHash
+  const { Email, Password } = req.body
 
-  if (!Email || !plainPassword) {
+  if (!Email || !Password) {
     res.status(400).json({ message: 'Thiếu email hoặc mật khẩu' })
     return
   }
 
   try {
-    const tokens = await login(Email, plainPassword)
+    const tokens = await login(Email, Password)
     if (!tokens) {
       res.status(401).json({ message: 'Thông tin đăng nhập không hợp lệ' })
       return
@@ -96,7 +95,7 @@ export const loginHandler = async (req: AuthRequest, res: Response): Promise<voi
     })
   } catch (error: unknown) {
     if (error instanceof Error) {
-      console.log(Error)
+      console.error(error)
 
       res.status(500).json({ message: error.message })
     } else {

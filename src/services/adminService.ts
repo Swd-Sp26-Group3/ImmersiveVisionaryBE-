@@ -1,5 +1,5 @@
 import { getDbPool } from '../config/database'
-import bcrypt from 'bcrypt'
+import bcrypt from 'bcryptjs'
 import type { User, Service, DashboardStats } from '../types/type'
 
 interface AdminCreateUserInput {

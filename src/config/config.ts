@@ -4,6 +4,19 @@ dotenv.config()
 
 const nodeEnv = process.env.NODE_ENV || 'development'
 
+const parseOrigins = (value: string, fallback: string): string | string[] => {
+  const origins = value
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean)
+
+  if (origins.length === 0) {
+    return fallback
+  }
+
+  return origins.length === 1 ? origins[0] : origins
+}
+
 const requiredEnv = (name: string, fallback = ''): string => {
   const value = process.env[name]?.trim()
 
@@ -35,7 +48,10 @@ export const config = {
   },
 
   cors: {
-    origin: requiredEnv('CORS_ORIGIN', 'http://localhost:5000'),
+    origin: parseOrigins(
+      process.env.CORS_ORIGIN || 'http://localhost:5000',
+      'http://localhost:5000'
+    ),
     credentials: true
   },
 

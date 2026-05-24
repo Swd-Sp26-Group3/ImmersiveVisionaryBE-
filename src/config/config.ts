@@ -18,12 +18,12 @@ export const config = {
   jwt: {
     secret: process.env.JWT_SECRET || 'hackhocai',
     refreshSecret: process.env.JWT_REFRESH_SECRET || 'hackhocai',
-    expiresIn: process.env.JWT_EXPIRES_IN || '15m',
+    expiresIn: process.env.JWT_EXPIRES_IN || '1h',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
   },
 
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: process.env.CORS_ORIGIN || 'http://localhost:5000',
     credentials: true
   },
 
@@ -45,6 +45,13 @@ export const config = {
     email: process.env.DEFAULT_ADMIN_EMAIL || 'admin@electricvehicle.com',
     password: process.env.DEFAULT_ADMIN_PASSWORD || 'Admin123!',
     roleName: process.env.DEFAULT_ADMIN_ROLE || 'ADMIN'
+  },
+
+  vnpay: {
+    tmnCode: process.env.VNP_TMN_CODE || '',
+    hashSecret: process.env.VNP_HASH_SECRET || '',
+    url: process.env.VNP_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
+    returnUrl: process.env.VNP_RETURN_URL || 'http://localhost:5000/api/payments/vnpay-return'
   },
 
   nodeEnv: process.env.NODE_ENV || 'development'

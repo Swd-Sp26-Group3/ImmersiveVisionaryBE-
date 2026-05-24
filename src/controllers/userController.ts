@@ -7,7 +7,8 @@ import {
   getAllUsers,
   updateUserById,
   softDeleteUser,
-  approveBusinessAccount
+  approveBusinessAccount,
+  updateUserRole
 } from '../services/userService'
 
 export const getProfileHandler = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -72,17 +73,17 @@ export const updateProfileHandler = async (req: AuthRequest, res: Response): Pro
     })
   } catch (error: any) {
     console.error('Error in updateProfileHandler:', error)
-    
+
     if (error.message === 'Email đã được sử dụng bởi user khác') {
       res.status(409).json({ message: error.message })
       return
     }
-    
+
     if (error.message === 'UserName đã được sử dụng bởi user khác') {
       res.status(409).json({ message: error.message })
       return
     }
-    
+
     if (error.message === 'Không có thông tin nào để cập nhật') {
       res.status(400).json({ message: error.message })
       return
@@ -178,10 +179,10 @@ const update = async (req: AuthRequest, res: Response): Promise<void> => {
       return
     }
 
-    const { UserName, Email, Phone } = req.body
+    const { UserName, Email, Phone, CompanyId } = req.body
 
-    if (!UserName && !Email && Phone === undefined) {
-      res.status(400).json({ message: 'Cần ít nhất một trường để cập nhật (UserName, Email, hoặc Phone)' })
+    if (!UserName && !Email && Phone === undefined && CompanyId === undefined) {
+      res.status(400).json({ message: 'Cần ít nhất một trường để cập nhật' })
       return
     }
 
@@ -193,6 +194,13 @@ const update = async (req: AuthRequest, res: Response): Promise<void> => {
       }
     }
 
+    if (CompanyId !== undefined && CompanyId !== null) {
+      if (!Number.isInteger(CompanyId) || CompanyId <= 0) {
+        res.status(400).json({ message: 'CompanyId phải là số nguyên dương hoặc null' })
+        return
+      }
+    }
+
     const isPrivilegedRole = req.user.roleName === 'ADMIN' || req.user.roleName === 'MANAGER'
     const isOwner = req.user.userId === targetUserId
     if (!isPrivilegedRole && !isOwner) {
@@ -200,7 +208,7 @@ const update = async (req: AuthRequest, res: Response): Promise<void> => {
       return
     }
 
-    const updatedUser = await updateUserById(targetUserId, { UserName, Email, Phone })
+    const updatedUser = await updateUserById(targetUserId, { UserName, Email, Phone, CompanyId })
 
     res.status(200).json({
       message: 'Cập nhật user thành công',
@@ -286,12 +294,60 @@ const approve = async (req: AuthRequest, res: Response): Promise<void> => {
       return
     }
 
-    if (error.message === 'Role SELLER không tồn tại') {
+    if (error.message === 'Role ARTIST không tồn tại') {
       res.status(400).json({ message: error.message })
       return
     }
 
     res.status(500).json({ message: 'Lỗi server khi approve business account' })
+  }
+}
+
+const updateRole = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Unauthorized' })
+      return
+    }
+
+    const targetUserId = parseInt(req.params.id, 10)
+    if (isNaN(targetUserId)) {
+      res.status(400).json({ message: 'User ID không hợp lệ' })
+      return
+    }
+
+    const { roleName } = req.body
+    if (!roleName) {
+      res.status(400).json({ message: 'Cần cung cấp roleName' })
+      return
+    }
+
+    // Check target user's current role
+    const targetUser = await getUserById(targetUserId)
+    if (!targetUser) {
+      res.status(404).json({ message: 'User không tồn tại' })
+      return
+    }
+
+    if (targetUser.RoleName === 'ADMIN') {
+      res.status(403).json({ message: 'Không thể chỉnh sửa role của ADMIN' })
+      return
+    }
+
+    const updatedUser = await updateUserRole(targetUserId, roleName)
+    res.status(200).json({
+      message: 'Cập nhật role thành công',
+      data: updatedUser
+    })
+  } catch (error: any) {
+    console.error('Error in updateRole:', error)
+
+    if (error.message.includes('không tồn tại')) {
+      res.status(400).json({ message: error.message })
+      return
+    }
+
+    res.status(500).json({ message: 'Lỗi server khi cập nhật role' })
   }
 }
 
@@ -302,7 +358,8 @@ export const userController = {
   getAll,
   update,
   delete: deleteUser,
-  approve
+  approve,
+  updateRole
 }
 
 export default userController

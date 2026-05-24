@@ -5,8 +5,7 @@ export enum RoleName {
   ADMIN = 'ADMIN',
   MANAGER = 'MANAGER',
   ARTIST = 'ARTIST',
-  CUSTOMER = 'CUSTOMER',
-  SELLER = 'SELLER'
+  CUSTOMER = 'CUSTOMER'
 }
 
 // Enum cho CompanyType
@@ -245,7 +244,7 @@ export interface MarketplaceOrder {
   MpOrderId: number
   AssetId: number
   BuyerCompanyId: number
-  SellerCompanyId: number
+  ProviderCompanyId: number
   Price: number | null
   Status: MarketplaceOrderStatus | null
   CreatedAt: Date

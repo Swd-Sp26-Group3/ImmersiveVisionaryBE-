@@ -19,6 +19,7 @@ export interface UpdateProfileData {
   UserName?: string
   Email?: string
   Phone?: string | null
+  CompanyId?: number | null
 }
 
 export interface UserListItem {
@@ -111,6 +112,14 @@ export const updateUserProfile = async (
     }
   }
 
+  // Kiểm tra CompanyId tồn tại (chỉ khi assign, không check khi null)
+  if (updateData.CompanyId !== undefined && updateData.CompanyId !== null) {
+    const companyExists = await pool.request()
+      .input('companyId', updateData.CompanyId)
+      .query(`SELECT CompanyId FROM [Company] WHERE CompanyId = @companyId`)
+    if (companyExists.recordset.length === 0) throw new Error('Company không tồn tại')
+  }
+
   // Build dynamic update query
   const updateFields: string[] = []
   const request = pool.request().input('userId', userId).input('updatedAt', new Date())
@@ -128,6 +137,11 @@ export const updateUserProfile = async (
   if (updateData.Phone !== undefined) {
     updateFields.push('Phone = @phone')
     request.input('phone', updateData.Phone)
+  }
+
+  if (updateData.CompanyId !== undefined) {
+    updateFields.push('CompanyId = @companyId')
+    request.input('companyId', updateData.CompanyId)
   }
 
   if (updateFields.length === 0) {
@@ -168,7 +182,8 @@ export const getAllUsers = async (): Promise<UserListItem[]> => {
       u.RoleId,
       r.RoleName,
       u.CreatedAt,
-      u.UpdatedAt
+      u.UpdatedAt,
+      1 as IsActive
     FROM [User] u
     INNER JOIN [Role] r ON u.RoleId = r.RoleId
     LEFT JOIN [Company] c ON u.CompanyId = c.CompanyId
@@ -206,24 +221,56 @@ export const softDeleteUser = async (userId: number): Promise<void> => {
   }
 }
 
-// Approve business account: đổi role sang SELLER
+// Approve business account: đổi role sang ARTIST
 export const approveBusinessAccount = async (userId: number): Promise<UserProfile | null> => {
   const pool = await getDbPool()
 
-  const roleResult = await pool.request().input('roleName', 'SELLER').query(`
+  const roleResult = await pool.request().input('roleName', 'ARTIST').query(`
     SELECT RoleId FROM [Role] WHERE RoleName = @roleName
   `)
 
   if (roleResult.recordset.length === 0) {
-    throw new Error('Role SELLER không tồn tại')
+    throw new Error('Role ARTIST không tồn tại')
   }
 
-  const sellerRoleId = roleResult.recordset[0].RoleId
+  const artistRoleId = roleResult.recordset[0].RoleId
 
   const updateResult = await pool
     .request()
     .input('userId', userId)
-    .input('roleId', sellerRoleId)
+    .input('roleId', artistRoleId)
+    .input('updatedAt', new Date())
+    .query(`
+      UPDATE [User]
+      SET RoleId = @roleId, UpdatedAt = @updatedAt
+      WHERE UserId = @userId AND IsDeleted = 0
+    `)
+
+  if (updateResult.rowsAffected[0] === 0) {
+    throw new Error('User không tồn tại')
+  }
+
+  return await getUserProfile(userId)
+}
+
+// Cập nhật role của user
+export const updateUserRole = async (userId: number, roleName: string): Promise<UserProfile | null> => {
+  const pool = await getDbPool()
+
+  const roleResult = await pool.request().input('roleName', roleName).query(`
+    SELECT RoleId FROM [Role] WHERE RoleName = @roleName
+  `)
+
+  if (roleResult.recordset.length === 0) {
+    throw new Error(`Role ${roleName} không tồn tại`)
+  }
+
+  const roleId = roleResult.recordset[0].RoleId
+
+  const updateResult = await pool
+    .request()
+    .input('userId', userId)
+    .input('roleId', roleId)
     .input('updatedAt', new Date())
     .query(`
       UPDATE [User]

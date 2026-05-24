@@ -66,6 +66,22 @@ app.use('/api/attachments', attachmentRoutes)
 // Initialize application
 export const initializeApp = async (): Promise<void> => {
   try {
+    const requiredValues = [
+      ['DB_SERVER', config.database.server],
+      ['DB_NAME', config.database.database],
+      ['DB_USER', config.database.user],
+      ['DB_PASSWORD', config.database.password],
+      ['JWT_SECRET', config.jwt.secret],
+      ['JWT_REFRESH_SECRET', config.jwt.refreshSecret],
+      ['CORS_ORIGIN', config.cors.origin]
+    ] as const
+
+    for (const [name, value] of requiredValues) {
+      if (config.nodeEnv === 'production' && (!value || value.length === 0)) {
+        throw new Error(`Missing required environment variable: ${name}`)
+      }
+    }
+
     // Connect to database
     await connectToDatabase()
     console.log('✅ Database connected successfully')

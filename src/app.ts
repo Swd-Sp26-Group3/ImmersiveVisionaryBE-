@@ -85,7 +85,6 @@ export const initializeApp = async (): Promise<void> => {
 
     // Connect to database
     await connectToDatabase()
-    console.log('✅ Database connected successfully')
 
     // Create default admin account
     await createDefaultAdmin()

@@ -51,12 +51,14 @@ export const closeDbPool = async (): Promise<void> => {
 export const createDefaultAdmin = async (): Promise<void> => {
   try {
     const dbPool = await getDbPool()
+    const adminUserName = 'System Administrator'
 
-    // Kiểm tra admin tồn tại chưa
+    // Check by both email and username to avoid unique constraint conflicts.
     const existingAdmin = await dbPool
       .request()
       .input('email', sql.VarChar, config.admin.email)
-      .query('SELECT UserId FROM [User] WHERE Email = @email')
+      .input('userName', sql.NVarChar(100), adminUserName)
+      .query('SELECT UserId FROM [User] WHERE Email = @email OR UserName = @userName')
 
     if (existingAdmin.recordset.length > 0) {
       console.log('⚠️ Default admin already exists')
@@ -83,7 +85,7 @@ export const createDefaultAdmin = async (): Promise<void> => {
       .request()
       .input('email', sql.NVarChar(100), config.admin.email)
       .input('passwordHash', sql.NVarChar(200), hashedPassword)
-      .input('userName', sql.NVarChar(100), 'System Administrator')
+      .input('userName', sql.NVarChar(100), adminUserName)
       .input('roleId', sql.Int, adminRoleId)
       .query(`
         INSERT INTO [User] (Email, PasswordHash, UserName, RoleId)
@@ -92,6 +94,14 @@ export const createDefaultAdmin = async (): Promise<void> => {
 
     console.log('✅ Default admin created successfully')
   } catch (error) {
+    // SQL Server duplicate key numbers: 2601 (duplicate index), 2627 (duplicate constraint)
+    const duplicateNumber = (error as { number?: number; originalError?: { info?: { number?: number } } }).number
+      ?? (error as { originalError?: { info?: { number?: number } } }).originalError?.info?.number
+    if (duplicateNumber === 2601 || duplicateNumber === 2627) {
+      console.log('⚠️ Default admin already exists')
+      return
+    }
+
     console.error('❌ Failed to create default admin:', error)
     throw error
   }

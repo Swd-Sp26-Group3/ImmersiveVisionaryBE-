@@ -4,8 +4,8 @@ import sql from 'mssql'
 import { config } from '../config/config'
 
 type MigrationRecord = {
-  name: string
-  appliedAt: Date
+  Name: string
+  AppliedAt: Date
 }
 
 const MIGRATIONS_TABLE = '__Migrations'
@@ -84,7 +84,7 @@ const ensureMigrationsTable = async (pool: sql.ConnectionPool): Promise<void> =>
 
 const getAppliedMigrations = async (pool: sql.ConnectionPool): Promise<Set<string>> => {
   const result = await pool.query<MigrationRecord>(`SELECT Name, AppliedAt FROM dbo.${MIGRATIONS_TABLE}`)
-  return new Set(result.recordset.map(r => r.name))
+  return new Set(result.recordset.map(r => r.Name))
 }
 
 const applyMigrationFile = async (pool: sql.ConnectionPool, filename: string, fullPath: string): Promise<void> => {

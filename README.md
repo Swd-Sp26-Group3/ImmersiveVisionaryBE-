@@ -7,12 +7,20 @@ This project uses SQL Server via the `mssql` driver. Database schema changes are
 
 - Development (TypeScript): `npm run migrate`
 - Production (compiled JS): `npm run migrate:prod`
+- Reset + migrate from scratch (dev): `npm run migrate:reset`
+- Reset + migrate from scratch (prod build): `npm run migrate:prod:reset`
 
 The migrator will:
 
 - Ensure the target database exists (connects to `master` first; requires permission).
 - Create a tracking table `dbo.__Migrations`.
 - Apply any new `migrations/*.sql` files (sorted by filename) exactly once.
+
+### Reset mode (`--reset-db`)
+
+- `--reset-db` will drop and recreate the target database, then apply all migrations from `migrations/`.
+- In production (`NODE_ENV=production`), reset is blocked by default.
+- To explicitly allow production reset, set `MIGRATION_ALLOW_PROD_RESET=true`.
 
 ### Typical Docker SQL Server (VPS)
 

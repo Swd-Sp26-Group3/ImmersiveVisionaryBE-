@@ -9,8 +9,17 @@ type MigrationRecord = {
 }
 
 const MIGRATIONS_TABLE = '__Migrations'
+const RESET_DB_FLAG = '--reset-db'
 
 const getMigrationsDir = (): string => path.resolve(process.cwd(), 'migrations')
+
+const parseBoolean = (value: string | undefined): boolean => {
+  if (!value) return false
+  const normalized = value.trim().toLowerCase()
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y' || normalized === 'on'
+}
+
+const shouldResetDatabase = (): boolean => process.argv.includes(RESET_DB_FLAG) || parseBoolean(process.env.MIGRATION_RESET_DB)
 
 const splitSqlBatches = (sqlText: string): string[] => {
   // SQL Server drivers don't understand `GO`; it's a client-side batch separator.
@@ -64,6 +73,36 @@ const ensureDatabaseExists = async (): Promise<void> => {
           EXEC sp_executesql @sql;
         END
       `)
+  } finally {
+    await masterPool.close()
+  }
+}
+
+const resetDatabaseIfRequested = async (): Promise<void> => {
+  if (!shouldResetDatabase()) {
+    return
+  }
+
+  if (config.nodeEnv === 'production' && !parseBoolean(process.env.MIGRATION_ALLOW_PROD_RESET)) {
+    throw new Error('Refusing to reset database in production. Set MIGRATION_ALLOW_PROD_RESET=true to confirm.')
+  }
+
+  const dbName = config.database.database
+  const escapedDbName = dbName.replace(/]/g, ']]')
+  const masterPool = await createPool('master')
+
+  try {
+    console.warn(`⚠️ Resetting database: ${dbName}`)
+    await masterPool.query(`
+      IF DB_ID(N'${escapedDbName}') IS NOT NULL
+      BEGIN
+        EXEC(N'ALTER DATABASE [${escapedDbName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE');
+        EXEC(N'DROP DATABASE [${escapedDbName}]');
+      END
+
+      EXEC(N'CREATE DATABASE [${escapedDbName}]');
+    `)
+    console.log(`✅ Database reset completed: ${dbName}`)
   } finally {
     await masterPool.close()
   }
@@ -129,6 +168,7 @@ export const runMigrations = async (): Promise<void> => {
     return
   }
 
+  await resetDatabaseIfRequested()
   await ensureDatabaseExists()
 
   const pool = await createPool(config.database.database)

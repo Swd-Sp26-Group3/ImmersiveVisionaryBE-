@@ -46,10 +46,10 @@ export const config = {
   port: Number.parseInt(process.env.PORT || '5000'),
 
   database: {
-    server: optionalEnv('DB_SERVER', 'localhost'),
-    database: optionalEnv('DB_NAME', 'ImmersiveVisionary'),
-    user: optionalEnv('DB_USER', 'sa'),
-    password: optionalEnv('DB_PASSWORD', '12345'),
+    server: nodeEnv === 'production' ? requiredEnv('DB_SERVER') : optionalEnv('DB_SERVER', 'localhost'),
+    database: nodeEnv === 'production' ? requiredEnv('DB_NAME') : optionalEnv('DB_NAME', 'ImmersiveVisionary'),
+    user: nodeEnv === 'production' ? requiredEnv('DB_USER') : optionalEnv('DB_USER', 'sa'),
+    password: nodeEnv === 'production' ? requiredEnv('DB_PASSWORD') : optionalEnv('DB_PASSWORD', '12345'),
     port: Number.parseInt(process.env.DB_PORT || '1433'),
     encrypt: parseBoolean(process.env.DB_ENCRYPT, nodeEnv === 'production'),
     trustServerCertificate: parseBoolean(process.env.DB_TRUST_CERT, nodeEnv !== 'production')

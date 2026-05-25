@@ -30,7 +30,16 @@ export const connectToDatabase = async (): Promise<void> => {
     pool = await new sql.ConnectionPool(dbConfig).connect()
     console.log('✅ Database connected successfully')
   } catch (error) {
-    console.error('❌ Database connection failed:', error)
+    console.error('❌ Database connection failed:', {
+      server: config.database.server,
+      database: config.database.database,
+      user: config.database.user,
+      port: config.database.port,
+      encrypt: config.database.encrypt,
+      trustServerCertificate: config.database.trustServerCertificate,
+      passwordProvided: Boolean(config.database.password)
+    })
+    console.error(error)
     throw error
   }
 }

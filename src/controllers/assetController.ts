@@ -238,6 +238,10 @@ export const listAllAssetsHandler = async (_req: AuthRequest, res: Response): Pr
 
 export const updateAssetHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Asset ID must be a string' })
+      return
+    }
     const assetId = parseAssetId(req.params.id)
 
     if (!assetId) {
@@ -353,6 +357,10 @@ export const updateAssetHandler = async (req: AuthRequest, res: Response): Promi
 
 export const deleteAssetHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Asset ID must be a string' })
+      return
+    }
     const assetId = parseAssetId(req.params.id)
 
     if (!assetId) {
@@ -379,6 +387,10 @@ export const deleteAssetHandler = async (req: AuthRequest, res: Response): Promi
 
 export const getAssetByIdHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Asset ID must be a string' })
+      return
+    }
     const assetId = parseAssetId(req.params.id)
 
     if (!assetId) {
@@ -419,6 +431,10 @@ export const listMarketplaceAssetsHandler = async (_req: AuthRequest, res: Respo
 
 export const submitAssetHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Asset ID must be a string' })
+      return
+    }
     const assetId = parseAssetId(req.params.id)
 
     if (!assetId) {
@@ -451,6 +467,10 @@ export const submitAssetHandler = async (req: AuthRequest, res: Response): Promi
 
 export const approveAssetHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Asset ID must be a string' })
+      return
+    }
     const assetId = parseAssetId(req.params.id)
 
     if (!assetId) {

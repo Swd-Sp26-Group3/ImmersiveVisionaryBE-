@@ -95,6 +95,10 @@ export const updateProfileHandler = async (req: AuthRequest, res: Response): Pro
 
 export const getUserByIdHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'User ID must be a string' })
+      return
+    }
     const targetUserId = parseInt(req.params.id, 10)
 
     if (isNaN(targetUserId)) {
@@ -144,6 +148,10 @@ const getById = async (req: AuthRequest, res: Response): Promise<void> => {
       return
     }
 
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'User ID must be a string' })
+      return
+    }
     const userId = parseInt(req.params.id, 10)
     if (isNaN(userId)) {
       res.status(400).json({ message: 'User ID không hợp lệ' })
@@ -173,6 +181,10 @@ const update = async (req: AuthRequest, res: Response): Promise<void> => {
       return
     }
 
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'User ID must be a string' })
+      return
+    }
     const targetUserId = parseInt(req.params.id, 10)
     if (isNaN(targetUserId)) {
       res.status(400).json({ message: 'User ID không hợp lệ' })
@@ -248,6 +260,10 @@ const deleteUser = async (req: AuthRequest, res: Response): Promise<void> => {
       return
     }
 
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'User ID must be a string' })
+      return
+    }
     const targetUserId = parseInt(req.params.id, 10)
     if (isNaN(targetUserId)) {
       res.status(400).json({ message: 'User ID không hợp lệ' })
@@ -275,6 +291,10 @@ const approve = async (req: AuthRequest, res: Response): Promise<void> => {
       return
     }
 
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'User ID must be a string' })
+      return
+    }
     const targetUserId = parseInt(req.params.id, 10)
     if (isNaN(targetUserId)) {
       res.status(400).json({ message: 'User ID không hợp lệ' })
@@ -310,6 +330,10 @@ const updateRole = async (req: AuthRequest, res: Response): Promise<void> => {
       return
     }
 
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'User ID must be a string' })
+      return
+    }
     const targetUserId = parseInt(req.params.id, 10)
     if (isNaN(targetUserId)) {
       res.status(400).json({ message: 'User ID không hợp lệ' })

@@ -73,6 +73,10 @@ export const createProductHandler = async (req: Request, res: Response): Promise
 
 export const updateProductHandler = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Product ID must be a string' })
+      return
+    }
     const productId = parseProductId(req.params.id)
 
     if (!productId) {
@@ -129,6 +133,10 @@ export const updateProductHandler = async (req: Request, res: Response): Promise
 
 export const deleteProductHandler = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Product ID must be a string' })
+      return
+    }
     const productId = parseProductId(req.params.id)
 
     if (!productId) {
@@ -155,6 +163,10 @@ export const deleteProductHandler = async (req: Request, res: Response): Promise
 
 export const getProductByIdHandler = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Product ID must be a string' })
+      return
+    }
     const productId = parseProductId(req.params.id)
 
     if (!productId) {

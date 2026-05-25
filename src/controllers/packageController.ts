@@ -90,6 +90,10 @@ export const createPackageHandler = async (req: Request, res: Response): Promise
 
 export const updatePackageHandler = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Package ID must be a string' })
+      return
+    }
     const packageId = parsePackageId(req.params.id)
 
     if (!packageId) {
@@ -148,6 +152,10 @@ export const updatePackageHandler = async (req: Request, res: Response): Promise
 
 export const deletePackageHandler = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Package ID must be a string' })
+      return
+    }
     const packageId = parsePackageId(req.params.id)
 
     if (!packageId) {
@@ -174,6 +182,10 @@ export const deletePackageHandler = async (req: Request, res: Response): Promise
 
 export const getPackageByIdHandler = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Package ID must be a string' })
+      return
+    }
     const packageId = parsePackageId(req.params.id)
 
     if (!packageId) {

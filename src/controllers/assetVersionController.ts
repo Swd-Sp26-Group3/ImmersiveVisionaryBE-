@@ -19,6 +19,10 @@ const parseId = (idParam: string): number | null => {
 
 export const uploadVersionHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.assetId !== 'string') {
+      res.status(400).json({ message: 'Asset ID must be a string' })
+      return
+    }
     const assetId = parseId(req.params.assetId)
     if (!assetId) {
       res.status(400).json({ message: 'Asset ID is invalid' })
@@ -78,6 +82,10 @@ export const uploadVersionHandler = async (req: AuthRequest, res: Response): Pro
 
 export const getVersionsHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.assetId !== 'string') {
+      res.status(400).json({ message: 'Asset ID must be a string' })
+      return
+    }
     const assetId = parseId(req.params.assetId)
     if (!assetId) {
       res.status(400).json({ message: 'Asset ID is invalid' })
@@ -98,6 +106,10 @@ export const getVersionsHandler = async (req: AuthRequest, res: Response): Promi
 
 export const downloadVersionHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Version ID must be a string' })
+      return
+    }
     const versionId = parseId(req.params.id)
     if (!versionId) {
       res.status(400).json({ message: 'Version ID is invalid' })

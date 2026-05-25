@@ -165,6 +165,10 @@ export const confirmPaymentHandler = async (req: AuthRequest, res: Response): Pr
 
 export const getPaymentDetailHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Payment ID must be a string' })
+      return
+    }
     const paymentId = parseId(req.params.id)
     if (!paymentId) {
       res.status(400).json({ message: 'Payment ID is invalid' })

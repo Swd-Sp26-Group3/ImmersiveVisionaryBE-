@@ -179,6 +179,10 @@ export const getOrderDetailHandler = async (req: AuthRequest, res: Response): Pr
       return
     }
 
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Order ID must be a string' })
+      return
+    }
     const orderId = parseOrderId(req.params.id)
     if (!orderId) {
       res.status(400).json({ message: 'Order ID is invalid' })
@@ -249,6 +253,10 @@ export const listOrdersHandler = async (_req: AuthRequest, res: Response): Promi
 
 export const updateOrderStatusHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Order ID must be a string' })
+      return
+    }
     const orderId = parseOrderId(req.params.id)
     if (!orderId) {
       res.status(400).json({ message: 'Order ID is invalid' })
@@ -303,6 +311,10 @@ export const updateOrderStatusHandler = async (req: AuthRequest, res: Response):
 
 export const updateOrderHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Order ID must be a string' })
+      return
+    }
     const orderId = parseOrderId(req.params.id)
     if (!orderId) {
       res.status(400).json({ message: 'Order ID is invalid' })
@@ -347,6 +359,10 @@ export const cancelOrderHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Order ID must be a string' })
+      return
+    }
     const orderId = parseOrderId(req.params.id)
     if (!orderId) {
       res.status(400).json({ message: 'Order ID is invalid' })
@@ -388,6 +404,10 @@ export const cancelOrderHandler = async (req: AuthRequest, res: Response): Promi
 
 export const getAttachmentsHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Order ID must be a string' })
+      return
+    }
     const orderId = parseOrderId(req.params.id)
     if (!orderId) { res.status(400).json({ message: 'Order ID is invalid' }); return }
     const attachments = await getAttachmentsForOrder(orderId)
@@ -400,6 +420,10 @@ export const getAttachmentsHandler = async (req: AuthRequest, res: Response): Pr
 
 export const addAttachmentHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Order ID must be a string' })
+      return
+    }
     const orderId = parseOrderId(req.params.id)
     if (!orderId) { res.status(400).json({ message: 'Order ID is invalid' }); return }
     const { FileName, MimeType, Base64Data } = req.body
@@ -414,6 +438,10 @@ export const addAttachmentHandler = async (req: AuthRequest, res: Response): Pro
 
 export const deleteAttachmentHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Attachment ID must be a string' })
+      return
+    }
     const attachmentId = parseOrderId(req.params.id)
     if (!attachmentId) { res.status(400).json({ message: 'Attachment ID is invalid' }); return }
     await deleteAttachment(attachmentId)

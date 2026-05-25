@@ -71,6 +71,10 @@ export const createCompanyHandler = async (req: Request, res: Response): Promise
 
 export const getCompanyByIdHandler = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Company ID must be a string' })
+      return
+    }
     const companyId = parseCompanyId(req.params.id)
 
     if (!companyId) {
@@ -111,6 +115,10 @@ export const listCompaniesHandler = async (_req: Request, res: Response): Promis
 
 export const updateCompanyHandler = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Company ID must be a string' })
+      return
+    }
     const companyId = parseCompanyId(req.params.id)
 
     if (!companyId) {

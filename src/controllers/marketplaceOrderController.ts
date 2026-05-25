@@ -115,6 +115,10 @@ export const getMarketplaceOrderDetailHandler = async (req: AuthRequest, res: Re
       return
     }
 
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Marketplace order ID must be a string' })
+      return
+    }
     const mpOrderId = parseId(req.params.id)
     if (!mpOrderId) {
       res.status(400).json({ message: 'Marketplace order ID is invalid' })
@@ -145,6 +149,10 @@ export const refundMarketplaceOrderHandler = async (req: AuthRequest, res: Respo
       return
     }
 
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Marketplace order ID must be a string' })
+      return
+    }
     const mpOrderId = parseId(req.params.id)
     if (!mpOrderId) {
       res.status(400).json({ message: 'Marketplace order ID is invalid' })

@@ -1,8 +1,17 @@
+import path from 'path'
 import dotenv from 'dotenv'
 
-dotenv.config()
+dotenv.config({ path: path.resolve(__dirname, '../../.env') })
 
 const nodeEnv = process.env.NODE_ENV || 'development'
+
+const parseBoolean = (value: string | undefined, fallback: boolean): boolean => {
+  if (value === undefined) return fallback
+  const normalized = value.trim().toLowerCase()
+  if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true
+  if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false
+  return fallback
+}
 
 const parseOrigins = (value: string, fallback: string): string | string[] => {
   const origins = value
@@ -42,8 +51,8 @@ export const config = {
     user: optionalEnv('DB_USER', 'sa'),
     password: optionalEnv('DB_PASSWORD', '12345'),
     port: Number.parseInt(process.env.DB_PORT || '1433'),
-    encrypt: process.env.DB_ENCRYPT ? process.env.DB_ENCRYPT === 'true' : nodeEnv === 'production',
-    trustServerCertificate: process.env.DB_TRUST_CERT ? process.env.DB_TRUST_CERT === 'true' : nodeEnv !== 'production'
+    encrypt: parseBoolean(process.env.DB_ENCRYPT, nodeEnv === 'production'),
+    trustServerCertificate: parseBoolean(process.env.DB_TRUST_CERT, nodeEnv !== 'production')
   },
 
   jwt: {

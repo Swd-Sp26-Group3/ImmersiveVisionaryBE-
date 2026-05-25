@@ -23,17 +23,31 @@ export interface AuthRequest extends Request {
   user?: AuthUser
 }
 
-export const authenticate = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers['authorization']
-
-  if (!authHeader) {
-    res.status(401).json({ message: 'Authorization header is missing' })
-    return
+const readCookieValue = (cookieHeader: string | undefined, cookieName: string): string | undefined => {
+  if (!cookieHeader) {
+    return undefined
   }
 
-  const token = authHeader.split(' ')[1]
+  const cookie = cookieHeader
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${cookieName}=`))
+
+  if (!cookie) {
+    return undefined
+  }
+
+  return cookie.slice(cookieName.length + 1)
+}
+
+export const authenticate = (req: AuthRequest, res: Response, next: NextFunction) => {
+  const authHeader = req.headers['authorization']
+  const headerToken = authHeader?.split(' ')[1]
+  const cookieToken = readCookieValue(req.headers.cookie, 'accessToken')
+  const token = headerToken || cookieToken
+
   if (!token) {
-    res.status(401).json({ message: 'Token is missing in the Authorization header' })
+    res.status(401).json({ message: 'Token is missing from Authorization header or accessToken cookie' })
     return
   }
 

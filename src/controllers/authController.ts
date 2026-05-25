@@ -10,6 +10,18 @@ import {
 } from '../services/authService'
 import { getDbPool } from '../config/database'
 
+const isProduction = process.env.NODE_ENV === 'production'
+
+const authCookieOptions = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: 'lax' as const,
+  path: '/'
+}
+
+const accessTokenCookieMaxAge = 15 * 60 * 1000
+const refreshTokenCookieMaxAge = 7 * 24 * 60 * 60 * 1000
+
 export const registerHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   const { UserName, Email, PasswordHash, ConfirmPassword, Phone, CompanyId, roleId } = req.body
 
@@ -87,11 +99,20 @@ export const loginHandler = async (req: AuthRequest, res: Response): Promise<voi
       return
     }
 
+    res.cookie('accessToken', tokens.accessToken, {
+      ...authCookieOptions,
+      maxAge: accessTokenCookieMaxAge
+    })
+    res.cookie('refreshToken', tokens.refreshToken, {
+      ...authCookieOptions,
+      maxAge: refreshTokenCookieMaxAge
+    })
+
     res.json({
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       success: true,
-      user: tokens.payload
+      user: tokens.user
     })
   } catch (error: unknown) {
     if (error instanceof Error) {
@@ -138,7 +159,14 @@ export const PasswordChangeHandler = async (req: AuthRequest, res: Response): Pr
 }
 
 export const refreshAccessTokenHandler = async (req: Request, res: Response): Promise<void> => {
-  const { refreshToken } = req.body
+  const refreshTokenFromBody = req.body?.refreshToken
+  const refreshTokenFromCookie = req.headers.cookie
+    ?.split(';')
+    .map((cookie) => cookie.trim())
+    .find((cookie) => cookie.startsWith('refreshToken='))
+    ?.split('=')[1]
+
+  const refreshToken = refreshTokenFromBody || refreshTokenFromCookie
   if (!refreshToken) {
     res.status(400).json({ message: 'Thiếu refresh token' })
     return
@@ -157,7 +185,17 @@ export const refreshAccessTokenHandler = async (req: Request, res: Response): Pr
       role: payload.role
     })
 
-    res.json({ accessToken: newAccessToken })
+    res.cookie('accessToken', newAccessToken, {
+      ...authCookieOptions,
+      maxAge: accessTokenCookieMaxAge
+    })
+
+    res.json({
+      accessToken: newAccessToken,
+      refreshToken,
+      success: true,
+      user: payload
+    })
   } catch (error: unknown) {
     if (error instanceof Error) {
       res.status(500).json({ message: error.message })
@@ -214,6 +252,9 @@ export const logoutHandler = async (req: AuthRequest, res: Response): Promise<vo
     await pool.request().input('id', id).query(`
         DELETE FROM RefreshToken WHERE UserId = @id
       `)
+
+    res.clearCookie('accessToken', authCookieOptions)
+    res.clearCookie('refreshToken', authCookieOptions)
 
     res.json({ success: true, message: 'Đăng xuất thành công' })
   } catch (error: unknown) {

@@ -119,7 +119,7 @@ export const login = async (email: string, password: string) => {
   const pool = await getDbPool()
 
   const result = await pool.request().input('email', email).query(`
-    SELECT u.UserId, u.Email, u.PasswordHash, u.RoleId, r.RoleName
+    SELECT u.UserId, u.UserName, u.Email, u.PasswordHash, u.RoleId, r.RoleName
     FROM [User] u
     INNER JOIN [Role] r ON u.RoleId = r.RoleId
     WHERE u.Email = @email
@@ -138,10 +138,17 @@ export const login = async (email: string, password: string) => {
     role: user.RoleName
   }
 
+  const userInfo = {
+    userId: user.UserId,
+    userName: user.UserName,
+    email: user.Email,
+    role: user.RoleName
+  }
+
   const accessToken = generateAccessToken(payload)
   const refreshToken = await generateRefreshToken(payload)
 
-  return { accessToken, refreshToken, payload }
+  return { accessToken, refreshToken, user: userInfo }
 }
 
 // Tạo Access Token

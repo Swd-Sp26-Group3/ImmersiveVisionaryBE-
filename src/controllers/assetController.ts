@@ -192,7 +192,15 @@ export const createAssetHandler = async (req: AuthRequest, res: Response): Promi
       data: asset
     })
   } catch (error: any) {
-    console.error('Error in createAssetHandler:', error)
+    console.error('Error in createAssetHandler:', error?.message ?? error)
+    console.error('Error details:', {
+      number: error?.number,
+      state: error?.state,
+      class: error?.class,
+      lineNumber: error?.lineNumber,
+      serverName: error?.serverName,
+      originalError: error?.originalError?.message
+    })
 
     if (error?.number === 547) {
       res.status(400).json({ message: 'OrderId, OwnerCompanyId, or CreatedBy does not exist' })

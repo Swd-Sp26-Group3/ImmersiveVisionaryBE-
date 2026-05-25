@@ -55,6 +55,38 @@ const ensureCompatibilityColumns = async (dbPool: sql.ConnectionPool): Promise<v
         ADD CONSTRAINT FK_MarketplaceOrder_BuyerUser
         FOREIGN KEY (BuyerUserId) REFERENCES dbo.[User](UserId);
     END
+
+    -- Make Asset3D.AssetType nullable (was NOT NULL, causing 500 when not provided)
+    IF OBJECT_ID(N'dbo.Asset3D', N'U') IS NOT NULL
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE name = N'AssetType'
+          AND object_id = OBJECT_ID(N'dbo.Asset3D')
+          AND is_nullable = 0
+      )
+      BEGIN
+        -- Drop the CHECK constraint referencing AssetType first
+        IF EXISTS (
+          SELECT 1 FROM sys.check_constraints
+          WHERE name = N'CK_Asset3D_AssetType'
+            AND parent_object_id = OBJECT_ID(N'dbo.Asset3D')
+        )
+          ALTER TABLE dbo.Asset3D DROP CONSTRAINT CK_Asset3D_AssetType;
+
+        ALTER TABLE dbo.Asset3D ALTER COLUMN AssetType NVARCHAR(50) NULL;
+
+        -- Re-add the CHECK constraint allowing NULL
+        IF NOT EXISTS (
+          SELECT 1 FROM sys.check_constraints
+          WHERE name = N'CK_Asset3D_AssetType'
+            AND parent_object_id = OBJECT_ID(N'dbo.Asset3D')
+        )
+          ALTER TABLE dbo.Asset3D
+          ADD CONSTRAINT CK_Asset3D_AssetType
+          CHECK (AssetType IS NULL OR AssetType IN (N'ORDER', N'MARKETPLACE', N'TEMPLATE'));
+      END
+    END
   `)
 }
 
@@ -68,8 +100,8 @@ const dbConfig: sql.config = {
     encrypt: config.database.encrypt,
     trustServerCertificate: config.database.trustServerCertificate,
     enableArithAbort: true,
-    requestTimeout: 30000,
-    connectTimeout: 30000
+    requestTimeout: 120000, // 2 minutes — needed for large Base64 asset uploads
+    connectTimeout: 60000
   },
   pool: {
     max: 10,

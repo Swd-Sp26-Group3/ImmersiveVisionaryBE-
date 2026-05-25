@@ -212,7 +212,7 @@ BEGIN
     CreatedBy INT NOT NULL,
     OwnerCompanyId INT NULL,
 
-    AssetType NVARCHAR(50) NOT NULL,
+    AssetType NVARCHAR(50) NULL,
 
     Price DECIMAL(12,2) NULL,
     IsMarketplace BIT NOT NULL CONSTRAINT DF_Asset3D_IsMarketplace DEFAULT (0),
@@ -228,7 +228,7 @@ BEGIN
     Description NVARCHAR(MAX) NULL,
     Base64Data VARCHAR(MAX) NULL,
 
-    CONSTRAINT CK_Asset3D_AssetType CHECK (AssetType IN (N'ORDER', N'MARKETPLACE', N'TEMPLATE')),
+    CONSTRAINT CK_Asset3D_AssetType CHECK (AssetType IS NULL OR AssetType IN (N'ORDER', N'MARKETPLACE', N'TEMPLATE')),
     CONSTRAINT CK_Asset3D_PublishStatus CHECK (PublishStatus IN (N'DRAFT', N'PENDING', N'PUBLISHED', N'REJECTED')),
 
     CONSTRAINT FK_Asset3D_Order FOREIGN KEY (OrderId) REFERENCES dbo.CreativeOrder(OrderId) ON DELETE CASCADE,

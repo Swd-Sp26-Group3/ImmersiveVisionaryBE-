@@ -4,6 +4,60 @@ import { config } from './config'
 
 let pool: sql.ConnectionPool | null = null
 
+const ensureCompatibilityColumns = async (dbPool: sql.ConnectionPool): Promise<void> => {
+  await dbPool.query(`
+    IF OBJECT_ID(N'dbo.CreativeOrder', N'U') IS NOT NULL
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM sys.columns
+        WHERE name = N'CreatedByUserId'
+          AND object_id = OBJECT_ID(N'dbo.CreativeOrder')
+      )
+        ALTER TABLE dbo.CreativeOrder ADD CreatedByUserId INT NULL;
+
+      IF NOT EXISTS (
+        SELECT 1
+        FROM sys.foreign_keys
+        WHERE name = N'FK_CreativeOrder_CreatedByUser'
+          AND parent_object_id = OBJECT_ID(N'dbo.CreativeOrder')
+      )
+        ALTER TABLE dbo.CreativeOrder
+        ADD CONSTRAINT FK_CreativeOrder_CreatedByUser
+        FOREIGN KEY (CreatedByUserId) REFERENCES dbo.[User](UserId);
+
+      IF NOT EXISTS (
+        SELECT 1
+        FROM sys.indexes
+        WHERE name = N'IX_CreativeOrder_CreatedByUserId'
+          AND object_id = OBJECT_ID(N'dbo.CreativeOrder')
+      )
+        CREATE INDEX IX_CreativeOrder_CreatedByUserId ON dbo.CreativeOrder(CreatedByUserId);
+    END
+
+    IF OBJECT_ID(N'dbo.MarketplaceOrder', N'U') IS NOT NULL
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM sys.columns
+        WHERE name = N'BuyerUserId'
+          AND object_id = OBJECT_ID(N'dbo.MarketplaceOrder')
+      )
+        ALTER TABLE dbo.MarketplaceOrder ADD BuyerUserId INT NULL;
+
+      IF NOT EXISTS (
+        SELECT 1
+        FROM sys.foreign_keys
+        WHERE name = N'FK_MarketplaceOrder_BuyerUser'
+          AND parent_object_id = OBJECT_ID(N'dbo.MarketplaceOrder')
+      )
+        ALTER TABLE dbo.MarketplaceOrder
+        ADD CONSTRAINT FK_MarketplaceOrder_BuyerUser
+        FOREIGN KEY (BuyerUserId) REFERENCES dbo.[User](UserId);
+    END
+  `)
+}
+
 const dbConfig: sql.config = {
   server: config.database.server,
   database: config.database.database,
@@ -28,6 +82,7 @@ export const connectToDatabase = async (): Promise<void> => {
   try {
     if (pool) return
     pool = await new sql.ConnectionPool(dbConfig).connect()
+    await ensureCompatibilityColumns(pool)
     console.log('✅ Database connected successfully')
   } catch (error) {
     console.error('❌ Database connection failed:', {

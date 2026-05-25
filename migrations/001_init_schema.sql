@@ -111,6 +111,7 @@ BEGIN
   CREATE TABLE dbo.CreativeOrder (
     OrderId INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CreativeOrder PRIMARY KEY,
     CompanyId INT NOT NULL,
+    CreatedByUserId INT NULL,
     ProductId INT NULL,
     PackageId INT NULL,
     Brief NVARCHAR(MAX) NULL,
@@ -134,6 +135,7 @@ BEGIN
     CONSTRAINT CK_CreativeOrder_Status CHECK (Status IN (N'NEW', N'IN_PRODUCTION', N'REVIEW', N'COMPLETED', N'DELIVERED', N'CANCELLED')),
 
     CONSTRAINT FK_CreativeOrder_Company FOREIGN KEY (CompanyId) REFERENCES dbo.Company(CompanyId),
+    CONSTRAINT FK_CreativeOrder_CreatedByUser FOREIGN KEY (CreatedByUserId) REFERENCES dbo.[User](UserId),
     CONSTRAINT FK_CreativeOrder_Product FOREIGN KEY (ProductId) REFERENCES dbo.Product(ProductId),
     CONSTRAINT FK_CreativeOrder_ServicePackage FOREIGN KEY (PackageId) REFERENCES dbo.ServicePackage(PackageId)
   );
@@ -145,6 +147,15 @@ BEGIN
     ALTER TABLE dbo.CreativeOrder ALTER COLUMN ProductId INT NULL;
   IF EXISTS (SELECT 1 FROM sys.columns WHERE name = N'PackageId' AND object_id = OBJECT_ID(N'dbo.CreativeOrder') AND is_nullable = 0)
     ALTER TABLE dbo.CreativeOrder ALTER COLUMN PackageId INT NULL;
+
+  IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE name = N'CreatedByUserId' AND object_id = OBJECT_ID(N'dbo.CreativeOrder'))
+    ALTER TABLE dbo.CreativeOrder ADD CreatedByUserId INT NULL;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM sys.foreign_keys
+    WHERE name = N'FK_CreativeOrder_CreatedByUser' AND parent_object_id = OBJECT_ID(N'dbo.CreativeOrder')
+  )
+    ALTER TABLE dbo.CreativeOrder ADD CONSTRAINT FK_CreativeOrder_CreatedByUser FOREIGN KEY (CreatedByUserId) REFERENCES dbo.[User](UserId);
 
   -- Add missing custom production columns
   IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE name = N'ProjectName' AND object_id = OBJECT_ID(N'dbo.CreativeOrder'))
@@ -267,6 +278,7 @@ BEGIN
     MpOrderId INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_MarketplaceOrder PRIMARY KEY,
     AssetId INT NOT NULL,
     BuyerCompanyId INT NOT NULL,
+    BuyerUserId INT NULL,
     SellerCompanyId INT NOT NULL,
     Price DECIMAL(12,2) NULL,
     Status NVARCHAR(50) NOT NULL,
@@ -276,8 +288,20 @@ BEGIN
 
     CONSTRAINT FK_MarketplaceOrder_Asset FOREIGN KEY (AssetId) REFERENCES dbo.Asset3D(AssetId),
     CONSTRAINT FK_MarketplaceOrder_BuyerCompany FOREIGN KEY (BuyerCompanyId) REFERENCES dbo.Company(CompanyId),
+    CONSTRAINT FK_MarketplaceOrder_BuyerUser FOREIGN KEY (BuyerUserId) REFERENCES dbo.[User](UserId),
     CONSTRAINT FK_MarketplaceOrder_SellerCompany FOREIGN KEY (SellerCompanyId) REFERENCES dbo.Company(CompanyId)
   );
+END
+ELSE
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE name = N'BuyerUserId' AND object_id = OBJECT_ID(N'dbo.MarketplaceOrder'))
+    ALTER TABLE dbo.MarketplaceOrder ADD BuyerUserId INT NULL;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM sys.foreign_keys
+    WHERE name = N'FK_MarketplaceOrder_BuyerUser' AND parent_object_id = OBJECT_ID(N'dbo.MarketplaceOrder')
+  )
+    ALTER TABLE dbo.MarketplaceOrder ADD CONSTRAINT FK_MarketplaceOrder_BuyerUser FOREIGN KEY (BuyerUserId) REFERENCES dbo.[User](UserId);
 END
 GO
 
@@ -380,6 +404,9 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_User_Email' AND objec
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_CreativeOrder_Status' AND object_id = OBJECT_ID(N'dbo.CreativeOrder'))
   CREATE INDEX IX_CreativeOrder_Status ON dbo.CreativeOrder(Status);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_CreativeOrder_CreatedByUserId' AND object_id = OBJECT_ID(N'dbo.CreativeOrder'))
+  CREATE INDEX IX_CreativeOrder_CreatedByUserId ON dbo.CreativeOrder(CreatedByUserId);
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Asset3D_IsMarketplace' AND object_id = OBJECT_ID(N'dbo.Asset3D'))
   CREATE INDEX IX_Asset3D_IsMarketplace ON dbo.Asset3D(IsMarketplace);

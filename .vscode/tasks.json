@@ -30,6 +30,16 @@
 				"build"
 			],
 			"problemMatcher": []
+		},
+		{
+			"label": "build",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"problemMatcher": []
 		}
 	]
 }

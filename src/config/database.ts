@@ -87,6 +87,20 @@ const ensureCompatibilityColumns = async (dbPool: sql.ConnectionPool): Promise<v
           CHECK (AssetType IS NULL OR AssetType IN (N'ORDER', N'MARKETPLACE', N'TEMPLATE'));
       END
     END
+
+    -- Alter PreviewImage to NVARCHAR(MAX) to support Base64 images
+    IF OBJECT_ID(N'dbo.Asset3D', N'U') IS NOT NULL
+    BEGIN
+      DECLARE @max_len INT;
+      SELECT @max_len = CHARACTER_MAXIMUM_LENGTH
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_NAME = 'Asset3D' AND COLUMN_NAME = 'PreviewImage';
+      
+      IF @max_len IS NOT NULL AND @max_len <> -1
+      BEGIN
+        ALTER TABLE dbo.Asset3D ALTER COLUMN PreviewImage NVARCHAR(MAX) NULL;
+      END
+    END
   `)
 }
 

@@ -207,7 +207,7 @@ BEGIN
     AssetId INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Asset3D PRIMARY KEY,
     OrderId INT NULL,
     AssetName NVARCHAR(200) NOT NULL,
-    PreviewImage NVARCHAR(500) NULL,
+    PreviewImage NVARCHAR(MAX) NULL,
 
     CreatedBy INT NOT NULL,
     OwnerCompanyId INT NULL,

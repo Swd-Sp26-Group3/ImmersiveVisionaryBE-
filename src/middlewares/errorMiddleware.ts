@@ -90,6 +90,15 @@ export const errorMiddleware = (error: CustomError, req: Request, res: Response,
     statusCode = 401
     message = MESSAGES.ERROR.INVALID_TOKEN
   }
+
+  // Always send a response so CORS headers (set by the cors() middleware earlier
+  // in the chain) are preserved on error responses.
+  if (!res.headersSent) {
+    res.status(statusCode).json({
+      success: false,
+      message
+    })
+  }
 }
 
 // Async error handler wrapper

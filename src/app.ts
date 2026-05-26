@@ -17,8 +17,8 @@ import assetVersionRoutes from './routes/assetVersionRoutes'
 import paymentRoutes from './routes/paymentRoutes'
 import marketplaceOrderRoutes from './routes/marketplaceOrderRoutes'
 import attachmentRoutes from './routes/attachmentRoutes'
+import { errorMiddleware } from './middlewares/errorMiddleware'
 
-// Import routes
 
 
 const app = express()
@@ -65,6 +65,11 @@ app.use('/api/asset-versions', assetVersionRoutes)
 app.use('/api/payments', paymentRoutes)
 app.use('/api/marketplace-orders', marketplaceOrderRoutes)
 app.use('/api/attachments', attachmentRoutes)
+
+// Global error handler — must be registered LAST so that:
+// 1. CORS headers are already set on the response by the cors() middleware
+// 2. Any unhandled errors return a proper JSON response (not Express's HTML default)
+app.use(errorMiddleware)
 
 // Initialize application
 export const initializeApp = async (): Promise<void> => {

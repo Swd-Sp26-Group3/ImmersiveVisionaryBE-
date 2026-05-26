@@ -26,8 +26,9 @@ const decompressBase64 = (raw: string | null | undefined): string | null | undef
     const b64 = raw.slice(5) // strip "gzip:"
     const compressed = Buffer.from(b64, 'base64')
     const decompressed = zlib.gunzipSync(compressed)
-    // Store as plain base64 (no data: URL prefix — just the raw bytes encoded)
-    return 'data:model/obj;base64,' + decompressed.toString('base64')
+    // Store as a fetchable data URL with a browser-compatible MIME type.
+    // .obj files are plain text — "text/plain" is universally supported by fetch().
+    return 'data:text/plain;charset=utf-8;base64,' + decompressed.toString('base64')
   } catch (e) {
     console.error('[decompressBase64] Failed to decompress:', e)
     throw new Error('INVALID_COMPRESSED_DATA')

@@ -60,7 +60,7 @@ export const createAsset = async (createdBy: number, payload: CreateAssetInput):
     .input('OrderId', sql.Int, payload.OrderId ?? null)
     .input('AssetName', sql.NVarChar(200), payload.AssetName)
     .input('Description', sql.NVarChar(sql.MAX), payload.Description ?? null)
-    .input('PreviewImage', sql.NVarChar(500), payload.PreviewImage ?? null)
+    .input('PreviewImage', sql.NVarChar(sql.MAX), payload.PreviewImage ?? null)
     .input('CreatedBy', sql.Int, createdBy)
     .input('OwnerCompanyId', sql.Int, payload.OwnerCompanyId ?? null)
     .input('AssetType', sql.NVarChar(50), payload.AssetType ?? null)
@@ -195,7 +195,7 @@ export const updateAsset = async (assetId: number, payload: UpdateAssetInput): P
 
   if (payload.PreviewImage !== undefined) {
     setParts.push('PreviewImage = @PreviewImage')
-    request.input('PreviewImage', sql.NVarChar(500), payload.PreviewImage)
+    request.input('PreviewImage', sql.NVarChar(sql.MAX), payload.PreviewImage)
   }
 
   if (payload.OwnerCompanyId !== undefined) {

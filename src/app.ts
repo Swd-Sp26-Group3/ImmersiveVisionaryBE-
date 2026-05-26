@@ -26,6 +26,18 @@ app.set('trust proxy', 1)
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ limit: '50mb', extended: true }))
 
+const corsOptions = {
+  origin: config.cors.origin,
+  credentials: config.cors.credentials,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}
+
+// ✅ CORS must come FIRST — before helmet and rate-limiter
+// so that OPTIONS preflight requests are handled immediately
+app.use(cors(corsOptions))
+app.options('*', cors(corsOptions)) // handle all preflight requests
+
 
 app.use(helmet())
 
@@ -41,16 +53,6 @@ const limiter = rateLimit({
   legacyHeaders: false
 })
 app.use(limiter)
-
-// CORS configuration
-app.use(
-  cors({
-    origin: config.cors.origin,
-    credentials: config.cors.credentials,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-  })
-)
 app.use('/api/auth', authRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/users', userRoutes)
@@ -74,7 +76,6 @@ export const initializeApp = async (): Promise<void> => {
       ['DB_PASSWORD', config.database.password],
       ['JWT_SECRET', config.jwt.secret],
       ['JWT_REFRESH_SECRET', config.jwt.refreshSecret],
-      ['CORS_ORIGIN', config.cors.origin]
     ] as const
 
     for (const [name, value] of requiredValues) {

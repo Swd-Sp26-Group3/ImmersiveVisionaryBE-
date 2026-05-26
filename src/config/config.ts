@@ -13,17 +13,37 @@ const parseBoolean = (value: string | undefined, fallback: boolean): boolean => 
   return fallback
 }
 
-const parseOrigins = (value: string, fallback: string): string | string[] => {
-  const origins = value
-    .split(',')
-    .map(origin => origin.trim())
-    .filter(Boolean)
+/**
+ * Build a dynamic CORS origin checker.
+ *
+ * Allowed origins (checked in order):
+ *  1. Exact matches from CORS_ORIGIN env var (comma-separated)
+ *  2. Any *.vercel.app subdomain  — covers ALL preview deployments automatically
+ *  3. Any localhost / 127.0.0.1 on any port — covers local dev
+ */
+type CorsCallback = (err: Error | null, allow?: boolean) => void
+const buildCorsOrigin = (envValue: string) => {
+  const exactOrigins = new Set(
+    envValue.split(',').map(o => o.trim()).filter(Boolean)
+  )
 
-  if (origins.length === 0) {
-    return fallback
+  return (origin: string | undefined, callback: CorsCallback) => {
+    // No origin = non-browser request (curl, Postman, SSR) → allow
+    if (!origin) return callback(null, true)
+
+    // 1. Exact match from env var
+    if (exactOrigins.has(origin)) return callback(null, true)
+
+    // 2. Any Vercel deployment (preview or production)
+    if (/^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin)) return callback(null, true)
+
+    // 3. Localhost on any port
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true)
+
+    // Blocked
+    console.warn(`[CORS] Blocked origin: ${origin}`)
+    callback(new Error(`CORS: origin '${origin}' not allowed`))
   }
-
-  return origins.length === 1 ? origins[0] : origins
 }
 
 const requiredEnv = (name: string): string => {
@@ -63,10 +83,7 @@ export const config = {
   },
 
   cors: {
-    origin: parseOrigins(
-      process.env.CORS_ORIGIN || 'http://localhost:5000',
-      'http://localhost:5000'
-    ),
+    origin: buildCorsOrigin(process.env.CORS_ORIGIN || ''),
     credentials: true
   },
 

@@ -1,3 +1,4 @@
+import zlib from 'zlib'
 import type { Response } from 'express'
 import type { AuthRequest } from '../middlewares/authMiddleware'
 import {
@@ -14,6 +15,24 @@ import {
 } from '../services/assetService'
 
 const ALLOWED_ASSET_TYPES: AssetType[] = ['ORDER', 'MARKETPLACE', 'TEMPLATE']
+
+/**
+ * If the FE sent a gzip-compressed payload (prefix "gzip:"), decompress it
+ * and return a plain base64 data URL. Otherwise pass through unchanged.
+ */
+const decompressBase64 = (raw: string | null | undefined): string | null | undefined => {
+  if (!raw || !raw.startsWith('gzip:')) return raw
+  try {
+    const b64 = raw.slice(5) // strip "gzip:"
+    const compressed = Buffer.from(b64, 'base64')
+    const decompressed = zlib.gunzipSync(compressed)
+    // Store as plain base64 (no data: URL prefix — just the raw bytes encoded)
+    return 'data:model/obj;base64,' + decompressed.toString('base64')
+  } catch (e) {
+    console.error('[decompressBase64] Failed to decompress:', e)
+    throw new Error('INVALID_COMPRESSED_DATA')
+  }
+}
 
 const parseAssetId = (idParam: string): number | null => {
   const id = Number(idParam)
@@ -173,6 +192,9 @@ export const createAssetHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
+    // Decompress if the FE sent a gzip-compressed payload
+    const finalBase64Data = decompressBase64(parsedBase64Data)
+
     const asset = await createAsset(req.user.userId, {
       OrderId: parseOptionalInt(OrderId),
       AssetName: AssetName.trim(),
@@ -184,7 +206,7 @@ export const createAssetHandler = async (req: AuthRequest, res: Response): Promi
       IsMarketplace: parsedIsMarketplace,
       Category: parsedCategory,
       Industry: parsedIndustry,
-      Base64Data: parsedBase64Data
+      Base64Data: finalBase64Data
     })
 
     res.status(201).json({
@@ -204,6 +226,11 @@ export const createAssetHandler = async (req: AuthRequest, res: Response): Promi
 
     if (error?.number === 547) {
       res.status(400).json({ message: 'OrderId, OwnerCompanyId, or CreatedBy does not exist' })
+      return
+    }
+
+    if (error.message === 'INVALID_COMPRESSED_DATA') {
+      res.status(400).json({ message: 'Failed to decompress 3D file — upload may be corrupted' })
       return
     }
 
@@ -323,6 +350,9 @@ export const updateAssetHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
+    // Decompress if the FE sent a gzip-compressed payload
+    const finalBase64Data = decompressBase64(parsedBase64Data)
+
     const asset = await updateAsset(assetId, {
       OrderId: parseOptionalInt(OrderId),
       AssetName: typeof AssetName === 'string' ? AssetName.trim() : undefined,
@@ -334,7 +364,7 @@ export const updateAssetHandler = async (req: AuthRequest, res: Response): Promi
       IsMarketplace: parsedIsMarketplace,
       Category: parsedCategory,
       Industry: parsedIndustry,
-      Base64Data: parsedBase64Data
+      Base64Data: finalBase64Data
     })
 
     res.status(200).json({

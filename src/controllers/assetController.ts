@@ -20,7 +20,7 @@ const ALLOWED_ASSET_TYPES: AssetType[] = ['ORDER', 'MARKETPLACE', 'TEMPLATE']
  * If the FE sent a gzip-compressed payload (prefix "gzip:"), decompress it
  * and return a plain base64 data URL. Otherwise pass through unchanged.
  */
-const decompressBase64 = (raw: string | null | undefined): string | null | undefined => {
+export const decompressBase64 = (raw: string | null | undefined): string | null | undefined => {
   if (!raw || !raw.startsWith('gzip:')) return raw
   try {
     const b64 = raw.slice(5) // strip "gzip:"

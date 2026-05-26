@@ -1,5 +1,6 @@
 import type { Response } from 'express'
 import type { AuthRequest } from '../middlewares/authMiddleware'
+import { decompressBase64 } from './assetController'
 import {
   createOrder,
   getOrderDetailForUser,
@@ -428,7 +429,8 @@ export const addAttachmentHandler = async (req: AuthRequest, res: Response): Pro
     if (!orderId) { res.status(400).json({ message: 'Order ID is invalid' }); return }
     const { FileName, MimeType, Base64Data } = req.body
     if (!FileName || !Base64Data) { res.status(400).json({ message: 'FileName and Base64Data are required' }); return }
-    const attachment = await addAttachmentToOrder(orderId, { FileName, MimeType, Base64Data })
+    const decompressedBase64 = decompressBase64(Base64Data)
+    const attachment = await addAttachmentToOrder(orderId, { FileName, MimeType, Base64Data: decompressedBase64 ?? '' })
     res.status(201).json({ message: 'Add attachment successfully', data: attachment })
   } catch (error) {
     console.error('Error in addAttachmentHandler:', error)

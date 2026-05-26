@@ -1,5 +1,6 @@
 import type { Response } from 'express'
 import type { AuthRequest } from '../middlewares/authMiddleware'
+import { decompressBase64 } from './assetController'
 import {
   createAssetVersion,
   getAssetVersions,
@@ -56,10 +57,12 @@ export const uploadVersionHandler = async (req: AuthRequest, res: Response): Pro
       return
     }
 
+    const decompressedBase64 = decompressBase64(Base64Data)
+
     const version = await createAssetVersion(assetId, {
       FileFormat: FileFormat as FileFormat,
       FileUrl: FileUrl ?? null,
-      Base64Data: Base64Data ?? null,
+      Base64Data: decompressedBase64 ?? null,
       PolyCount: PolyCount ?? null,
       TextureSize: TextureSize ?? null
     })

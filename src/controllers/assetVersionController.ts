@@ -76,7 +76,11 @@ export const uploadVersionHandler = async (req: AuthRequest, res: Response): Pro
       return
     }
 
-    res.status(500).json({ message: 'Server error while uploading version' })
+    res.status(500).json({
+      message: 'Server error while uploading version',
+      error: error?.message,
+      detail: error?.originalError?.message
+    })
   }
 }
 

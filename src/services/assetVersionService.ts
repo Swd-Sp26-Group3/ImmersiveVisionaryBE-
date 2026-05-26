@@ -29,7 +29,7 @@ export const createAssetVersion = async (assetId: number, payload: CreateAssetVe
     .request()
     .input('AssetId', sql.Int, assetId)
     .input('FileFormat', sql.NVarChar(50), payload.FileFormat)
-    .input('FileUrl', sql.NVarChar(500), payload.FileUrl ?? null)
+    .input('FileUrl', sql.NVarChar(sql.MAX), payload.FileUrl ?? null)
     .input('Base64Data', sql.VarChar(sql.MAX), payload.Base64Data ?? null)
     .input('PolyCount', sql.Int, payload.PolyCount ?? null)
     .input('TextureSize', sql.NVarChar(100), payload.TextureSize ?? null)

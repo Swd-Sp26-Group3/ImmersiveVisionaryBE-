@@ -101,6 +101,40 @@ const ensureCompatibilityColumns = async (dbPool: sql.ConnectionPool): Promise<v
         ALTER TABLE dbo.Asset3D ALTER COLUMN PreviewImage NVARCHAR(MAX) NULL;
       END
     END
+
+    -- Ensure Base64Data is VARCHAR(MAX) on Asset3D (fixes mssql "value out of range" on large .obj files)
+    IF OBJECT_ID(N'dbo.Asset3D', N'U') IS NOT NULL
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE name = N'Base64Data' AND object_id = OBJECT_ID(N'dbo.Asset3D')
+      )
+        ALTER TABLE dbo.Asset3D ADD [Base64Data] VARCHAR(MAX) NULL;
+      ELSE IF EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE name = N'Base64Data'
+          AND object_id = OBJECT_ID(N'dbo.Asset3D')
+          AND max_length != -1
+      )
+        ALTER TABLE dbo.Asset3D ALTER COLUMN [Base64Data] VARCHAR(MAX) NULL;
+    END
+
+    -- Ensure Base64Data is VARCHAR(MAX) on AssetVersion
+    IF OBJECT_ID(N'dbo.AssetVersion', N'U') IS NOT NULL
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE name = N'Base64Data' AND object_id = OBJECT_ID(N'dbo.AssetVersion')
+      )
+        ALTER TABLE dbo.AssetVersion ADD [Base64Data] VARCHAR(MAX) NULL;
+      ELSE IF EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE name = N'Base64Data'
+          AND object_id = OBJECT_ID(N'dbo.AssetVersion')
+          AND max_length != -1
+      )
+        ALTER TABLE dbo.AssetVersion ALTER COLUMN [Base64Data] VARCHAR(MAX) NULL;
+    END
   `)
 }
 

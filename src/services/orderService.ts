@@ -204,11 +204,15 @@ export const getOrderDetailForUser = async (
 
   const companyId = await getUserCompanyId(userId)
 
+  // If user has no company, allow access if they created the order
   if (!companyId) {
-    throw new Error('USER_COMPANY_NOT_FOUND')
+    if (order.CreatedByUserId === userId) {
+      return order
+    }
+    throw new Error('ORDER_FORBIDDEN')
   }
 
-  if (order.CompanyId !== companyId) {
+  if (order.CompanyId !== companyId && order.CreatedByUserId !== userId) {
     throw new Error('ORDER_FORBIDDEN')
   }
 
@@ -255,14 +259,11 @@ export const listOrdersForArtist = async (userId: number): Promise<CreativeOrder
 
 export const listMyOrders = async (userId: number): Promise<CreativeOrderDetail[]> => {
   const companyId = await getUserCompanyId(userId)
-
-  if (!companyId) {
-    throw new Error('USER_COMPANY_NOT_FOUND')
-  }
-
   const pool = await getDbPool()
 
-  const result = await pool.request().input('CompanyId', sql.Int, companyId).query(`
+  // If user has no company, list orders they personally created
+  if (!companyId) {
+    const result = await pool.request().input('UserId', sql.Int, userId).query(`
       SELECT
         o.*,
         c.CompanyName,
@@ -275,7 +276,29 @@ export const listMyOrders = async (userId: number): Promise<CreativeOrderDetail[
       LEFT JOIN [Product] p ON o.ProductId = p.ProductId
       LEFT JOIN [ServicePackage] sp ON o.PackageId = sp.PackageId
       LEFT JOIN [User] u ON o.CreatedByUserId = u.UserId
-      WHERE o.CompanyId = @CompanyId AND o.IsDeleted = 0
+      WHERE o.CreatedByUserId = @UserId AND o.IsDeleted = 0
+      ORDER BY o.CreatedAt DESC
+    `)
+    return result.recordset
+  }
+
+  const result = await pool.request()
+    .input('CompanyId', sql.Int, companyId)
+    .input('UserId', sql.Int, userId)
+    .query(`
+      SELECT
+        o.*,
+        c.CompanyName,
+        p.ProductName,
+        sp.PackageName,
+        u.UserName as BuyerName,
+        u.Phone as BuyerPhone
+      FROM [CreativeOrder] o
+      LEFT JOIN [Company] c ON o.CompanyId = c.CompanyId
+      LEFT JOIN [Product] p ON o.ProductId = p.ProductId
+      LEFT JOIN [ServicePackage] sp ON o.PackageId = sp.PackageId
+      LEFT JOIN [User] u ON o.CreatedByUserId = u.UserId
+      WHERE (o.CompanyId = @CompanyId OR o.CreatedByUserId = @UserId) AND o.IsDeleted = 0
       ORDER BY o.CreatedAt DESC
     `)
 
@@ -514,43 +537,50 @@ export const updateOrder = async (
 
 export const cancelOrderForCustomer = async (orderId: number, userId: number): Promise<CreativeOrder> => {
   const companyId = await getUserCompanyId(userId)
-
-  if (!companyId) {
-    throw new Error('USER_COMPANY_NOT_FOUND')
-  }
-
   const pool = await getDbPool()
 
-  const result = await pool
-    .request()
+  // Build WHERE clause that works regardless of whether the user has a companyId
+  const cancelReq = pool.request()
     .input('OrderId', sql.Int, orderId)
-    .input('CompanyId', sql.Int, companyId)
+    .input('UserId', sql.Int, userId)
     .input('Status', sql.NVarChar(50), 'CANCELLED')
     .input('UpdatedAt', sql.DateTime, new Date())
-    .query(`
-      UPDATE [CreativeOrder]
-      SET Status = @Status, UpdatedAt = @UpdatedAt
-      OUTPUT INSERTED.*
-      WHERE OrderId = @OrderId AND CompanyId = @CompanyId AND IsDeleted = 0 AND Status <> @Status
-    `)
+
+  let whereClause = `OrderId = @OrderId AND IsDeleted = 0 AND Status <> @Status`
+  if (companyId) {
+    cancelReq.input('CompanyId', sql.Int, companyId)
+    whereClause += ` AND (CompanyId = @CompanyId OR CreatedByUserId = @UserId)`
+  } else {
+    whereClause += ` AND CreatedByUserId = @UserId`
+  }
+
+  const result = await cancelReq.query(`
+    UPDATE [CreativeOrder]
+    SET Status = @Status, UpdatedAt = @UpdatedAt
+    OUTPUT INSERTED.*
+    WHERE ${whereClause}
+  `)
 
   if (result.recordset.length > 0) {
     return result.recordset[0]
   }
 
-  const existingOrder = await pool.request().input('OrderId', sql.Int, orderId).query(`
-    SELECT OrderId, CompanyId, Status
-    FROM [CreativeOrder]
-    WHERE OrderId = @OrderId AND IsDeleted = 0
-  `)
+  const existingOrder = await pool.request()
+    .input('OrderId', sql.Int, orderId)
+    .input('CheckUserId', sql.Int, userId)
+    .query(`
+      SELECT OrderId, CompanyId, CreatedByUserId, Status
+      FROM [CreativeOrder]
+      WHERE OrderId = @OrderId AND IsDeleted = 0
+    `)
 
   if (existingOrder.recordset.length === 0) {
     throw new Error('ORDER_NOT_FOUND')
   }
 
-  const order = existingOrder.recordset[0] as { CompanyId: number; Status: CreativeOrderStatus }
+  const order = existingOrder.recordset[0] as { CompanyId: number | null; CreatedByUserId: number | null; Status: CreativeOrderStatus }
 
-  if (order.CompanyId !== companyId) {
+  if (order.CompanyId !== companyId && order.CreatedByUserId !== userId) {
     throw new Error('ORDER_FORBIDDEN')
   }
 

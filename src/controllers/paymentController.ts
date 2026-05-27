@@ -36,6 +36,42 @@ const getUserCompanyId = async (userId: number): Promise<number | null> => {
   return result.recordset[0]?.CompanyId ?? null
 }
 
+/**
+ * Gets user's CompanyId, auto-creating a 'Personal Account' company if the user has none.
+ */
+const getOrCreateUserCompanyId = async (userId: number): Promise<number> => {
+  const existing = await getUserCompanyId(userId)
+  if (existing) return existing
+
+  const { getDbPool } = await import('../config/database')
+  const sql = (await import('mssql')).default
+  const pool = await getDbPool()
+  const transaction = new sql.Transaction(pool)
+  await transaction.begin()
+  try {
+    const companyRes = await new sql.Request(transaction)
+      .input('CompanyName', sql.NVarChar(200), 'Personal Account')
+      .input('CompanyType', sql.NVarChar(50), 'BRAND')
+      .query(`
+        INSERT INTO [Company] (CompanyName, CompanyType, Status)
+        OUTPUT INSERTED.CompanyId
+        VALUES (@CompanyName, @CompanyType, 'ACTIVE')
+      `)
+    const newCompanyId = companyRes.recordset[0].CompanyId
+
+    await new sql.Request(transaction)
+      .input('CompanyId', sql.Int, newCompanyId)
+      .input('UserId', sql.Int, userId)
+      .query('UPDATE [User] SET CompanyId = @CompanyId WHERE UserId = @UserId')
+
+    await transaction.commit()
+    return newCompanyId
+  } catch (err) {
+    await transaction.rollback()
+    throw err
+  }
+}
+
 export const createPaymentHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
@@ -80,12 +116,8 @@ export const createPaymentHandler = async (req: AuthRequest, res: Response): Pro
       }
       resolvedCompanyId = CompanyId
     } else {
-      const userCompanyId = await getUserCompanyId(req.user.userId)
-      if (!userCompanyId) {
-        res.status(400).json({ message: 'User is not associated with a company' })
-        return
-      }
-      resolvedCompanyId = userCompanyId
+      // Auto-create a Personal Account company for users who don't have one yet
+      resolvedCompanyId = await getOrCreateUserCompanyId(req.user.userId)
     }
 
     const payment = await createPayment({

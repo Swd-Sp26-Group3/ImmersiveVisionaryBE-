@@ -41,6 +41,40 @@ const getUserCompanyId = async (userId: number): Promise<number | null> => {
   return result.recordset[0].CompanyId ?? null
 }
 
+/**
+ * Gets user's CompanyId, auto-creating a 'Personal Account' company if the user has none.
+ */
+const getOrCreateUserCompanyId = async (userId: number): Promise<number> => {
+  const existing = await getUserCompanyId(userId)
+  if (existing) return existing
+
+  const pool = await getDbPool()
+  const transaction = new sql.Transaction(pool)
+  await transaction.begin()
+  try {
+    const companyRes = await new sql.Request(transaction)
+      .input('CompanyName', sql.NVarChar(200), 'Personal Account')
+      .input('CompanyType', sql.NVarChar(50), 'BRAND')
+      .query(`
+        INSERT INTO [Company] (CompanyName, CompanyType, Status)
+        OUTPUT INSERTED.CompanyId
+        VALUES (@CompanyName, @CompanyType, 'ACTIVE')
+      `)
+    const newCompanyId = companyRes.recordset[0].CompanyId
+
+    await new sql.Request(transaction)
+      .input('CompanyId', sql.Int, newCompanyId)
+      .input('UserId', sql.Int, userId)
+      .query('UPDATE [User] SET CompanyId = @CompanyId WHERE UserId = @UserId')
+
+    await transaction.commit()
+    return newCompanyId
+  } catch (err) {
+    await transaction.rollback()
+    throw err
+  }
+}
+
 const getAssetForMarketplace = async (assetId: number): Promise<{ AssetId: number; OwnerCompanyId: number; Price: number | null } | null> => {
   const pool = await getDbPool()
 
@@ -67,15 +101,17 @@ export const createMarketplaceOrder = async (
   payload: CreateMarketplaceOrderInput
 ): Promise<MarketplaceOrder> => {
   const normalizedRole = roleName.toUpperCase()
-  const userCompanyId = await getUserCompanyId(userId)
 
-  const buyerCompanyId =
-    normalizedRole === 'ADMIN' || normalizedRole === 'MANAGER'
-      ? payload.BuyerCompanyId ?? userCompanyId
-      : userCompanyId
+  let buyerCompanyId: number
 
-  if (!buyerCompanyId) {
-    throw new Error('BUYER_COMPANY_NOT_FOUND')
+  if (normalizedRole === 'ADMIN' || normalizedRole === 'MANAGER') {
+    const userCompanyId = await getUserCompanyId(userId)
+    const resolved = payload.BuyerCompanyId ?? userCompanyId
+    if (!resolved) throw new Error('BUYER_COMPANY_NOT_FOUND')
+    buyerCompanyId = resolved
+  } else {
+    // Auto-create a Personal Account company for users who don't have one yet
+    buyerCompanyId = await getOrCreateUserCompanyId(userId)
   }
 
   const asset = await getAssetForMarketplace(payload.AssetId)
@@ -155,22 +191,34 @@ export const createInternalMarketplaceOrder = async (
 
 export const listMyPurchases = async (userId: number): Promise<MarketplaceOrder[]> => {
   const buyerCompanyId = await getUserCompanyId(userId)
-
-  if (!buyerCompanyId) {
-    throw new Error('BUYER_COMPANY_NOT_FOUND')
-  }
-
   const pool = await getDbPool()
+
+  // If user has no company, query by BuyerUserId
+  if (!buyerCompanyId) {
+    const result = await pool
+      .request()
+      .input('BuyerUserId', sql.Int, userId)
+      .query(`
+        SELECT mo.*, bu.UserName as BuyerName, bu.Phone as BuyerPhone, a.AssetName
+        FROM [MarketplaceOrder] mo
+        LEFT JOIN [User] bu ON mo.BuyerUserId = bu.UserId
+        LEFT JOIN [Asset3D] a ON mo.AssetId = a.AssetId
+        WHERE mo.BuyerUserId = @BuyerUserId
+        ORDER BY mo.MpOrderId DESC
+      `)
+    return result.recordset
+  }
 
   const result = await pool
     .request()
     .input('BuyerCompanyId', sql.Int, buyerCompanyId)
+    .input('BuyerUserId', sql.Int, userId)
     .query(`
       SELECT mo.*, bu.UserName as BuyerName, bu.Phone as BuyerPhone, a.AssetName
       FROM [MarketplaceOrder] mo
       LEFT JOIN [User] bu ON mo.BuyerUserId = bu.UserId
       LEFT JOIN [Asset3D] a ON mo.AssetId = a.AssetId
-      WHERE mo.BuyerCompanyId = @BuyerCompanyId
+      WHERE mo.BuyerCompanyId = @BuyerCompanyId OR mo.BuyerUserId = @BuyerUserId
       ORDER BY mo.MpOrderId DESC
     `)
 

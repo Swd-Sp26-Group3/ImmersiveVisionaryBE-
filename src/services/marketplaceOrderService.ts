@@ -75,7 +75,9 @@ const getOrCreateUserCompanyId = async (userId: number): Promise<number> => {
   }
 }
 
-const getAssetForMarketplace = async (assetId: number): Promise<{ AssetId: number; OwnerCompanyId: number; Price: number | null } | null> => {
+const getAssetForMarketplace = async (
+  assetId: number
+): Promise<{ AssetId: number; OwnerCompanyId: number | null; Price: number | null } | null> => {
   const pool = await getDbPool()
 
   const result = await pool.request().input('AssetId', sql.Int, assetId).query(`
@@ -85,7 +87,6 @@ const getAssetForMarketplace = async (assetId: number): Promise<{ AssetId: numbe
       AND IsDeleted = 0
       AND IsMarketplace = 1
       AND PublishStatus = 'PUBLISHED'
-      AND OwnerCompanyId IS NOT NULL
   `)
 
   if (result.recordset.length === 0) {
@@ -119,7 +120,7 @@ export const createMarketplaceOrder = async (
     throw new Error('ASSET_NOT_AVAILABLE')
   }
 
-  if (asset.OwnerCompanyId === buyerCompanyId) {
+  if (asset.OwnerCompanyId && asset.OwnerCompanyId === buyerCompanyId) {
     throw new Error('CANNOT_BUY_OWN_ASSET')
   }
 
@@ -142,15 +143,21 @@ export const createMarketplaceOrder = async (
     throw new Error('ORDER_ALREADY_EXISTS')
   }
 
-  const result = await pool
+  const request = pool
     .request()
     .input('AssetId', sql.Int, payload.AssetId)
     .input('BuyerCompanyId', sql.Int, buyerCompanyId)
     .input('BuyerUserId', sql.Int, userId)
-    .input('SellerCompanyId', sql.Int, asset.OwnerCompanyId)
     .input('Price', sql.Decimal(18, 2), asset.Price)
     .input('Status', sql.NVarChar(50), 'PENDING')
-    .query(`
+
+  if (asset.OwnerCompanyId) {
+    request.input('SellerCompanyId', sql.Int, asset.OwnerCompanyId)
+  } else {
+    request.input('SellerCompanyId', sql.Int, null)
+  }
+
+  const result = await request.query(`
       INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, BuyerUserId, SellerCompanyId, Price, Status)
       OUTPUT INSERTED.*
       VALUES (@AssetId, @BuyerCompanyId, @BuyerUserId, @SellerCompanyId, @Price, @Status)

@@ -265,19 +265,30 @@ export const getMarketplaceOrderDetail = async (
   }
 
   const buyerCompanyId = await getUserCompanyId(userId)
-  if (!buyerCompanyId) {
-    return null
-  }
 
-  const result = await pool
+  const request = pool
     .request()
     .input('MpOrderId', sql.Int, mpOrderId)
-    .input('BuyerCompanyId', sql.Int, buyerCompanyId)
-    .query(`
+    .input('BuyerUserId', sql.Int, userId)
+
+  let whereClause = `mo.MpOrderId = @MpOrderId AND mo.BuyerUserId = @BuyerUserId`
+
+  if (buyerCompanyId) {
+    request.input('BuyerCompanyId', sql.Int, buyerCompanyId)
+    whereClause = `
+    mo.MpOrderId = @MpOrderId
+    AND (
+      mo.BuyerCompanyId = @BuyerCompanyId
+      OR mo.BuyerUserId = @BuyerUserId
+    )
+  `
+  }
+
+  const result = await request.query(`
       SELECT mo.*, bu.UserName as BuyerName, bu.Phone as BuyerPhone
       FROM [MarketplaceOrder] mo
       LEFT JOIN [User] bu ON mo.BuyerUserId = bu.UserId
-      WHERE mo.MpOrderId = @MpOrderId AND mo.BuyerCompanyId = @BuyerCompanyId
+      WHERE ${whereClause}
     `)
 
   return result.recordset[0] ?? null

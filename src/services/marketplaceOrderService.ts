@@ -81,19 +81,20 @@ const getAssetForMarketplace = async (
   const pool = await getDbPool()
 
   const result = await pool.request().input('AssetId', sql.Int, assetId).query(`
-    SELECT AssetId, OwnerCompanyId, Price
+    SELECT AssetId, OwnerCompanyId, Price, IsMarketplace, PublishStatus, IsDeleted
     FROM [Asset3D]
     WHERE AssetId = @AssetId
-      AND IsDeleted = 0
-      AND IsMarketplace = 1
-      AND PublishStatus = 'PUBLISHED'
   `)
 
-  if (result.recordset.length === 0) {
+  const asset = result.recordset[0]
+  console.log(`[Marketplace] Asset lookup for AssetId=${assetId}:`, asset)
+
+  if (!asset || asset.IsDeleted) {
+    console.error(`[Marketplace] Asset not found or is deleted.`)
     return null
   }
 
-  return result.recordset[0]
+  return asset
 }
 
 export const createMarketplaceOrder = async (

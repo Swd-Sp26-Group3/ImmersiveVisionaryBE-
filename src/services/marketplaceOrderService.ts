@@ -89,8 +89,13 @@ const getAssetForMarketplace = async (
   const asset = result.recordset[0]
   console.log(`[Marketplace] Asset lookup for AssetId=${assetId}:`, asset)
 
-  if (!asset || asset.IsDeleted) {
-    console.error(`[Marketplace] Asset not found or is deleted.`)
+  if (!asset || asset.IsDeleted || !asset.IsMarketplace || asset.PublishStatus !== 'PUBLISHED') {
+    console.error(
+      `[Marketplace] Asset ${assetId} is not available for purchase.`,
+      `IsDeleted=${asset?.IsDeleted}`,
+      `IsMarketplace=${asset?.IsMarketplace}`,
+      `PublishStatus=${asset?.PublishStatus}`
+    )
     return null
   }
 

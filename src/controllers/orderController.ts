@@ -1,4 +1,7 @@
+import fs from 'fs'
+import path from 'path'
 import type { Response } from 'express'
+import 'multer'
 import type { AuthRequest } from '../middlewares/authMiddleware'
 import { decompressBase64 } from './assetController'
 import {
@@ -11,6 +14,7 @@ import {
   updateOrder,
   cancelOrderForCustomer,
   getAttachmentsForOrder,
+  getAttachmentById,
   addAttachmentToOrder,
   deleteAttachment,
   type CreativeOrderStatus
@@ -419,6 +423,23 @@ export const getAttachmentsHandler = async (req: AuthRequest, res: Response): Pr
   }
 }
 
+export const getAttachmentByIdHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (typeof req.params.id !== 'string') {
+      res.status(400).json({ message: 'Attachment ID must be a string' })
+      return
+    }
+    const attachmentId = parseOrderId(req.params.id)
+    if (!attachmentId) { res.status(400).json({ message: 'Attachment ID is invalid' }); return }
+    const attachment = await getAttachmentById(attachmentId)
+    if (!attachment) { res.status(404).json({ message: 'Attachment not found' }); return }
+    res.status(200).json({ message: 'Get attachment successfully', data: attachment })
+  } catch (error) {
+    console.error('Error in getAttachmentByIdHandler:', error)
+    res.status(500).json({ message: 'Server error while getting attachment' })
+  }
+}
+
 export const addAttachmentHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (typeof req.params.id !== 'string') {
@@ -455,6 +476,80 @@ export const deleteAttachmentHandler = async (req: AuthRequest, res: Response): 
   }
 }
 
+export const uploadChunkHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { uploadId, prefix, fileName, mimeType, orderId } = req.body
+    const chunkIndex = req.body.chunkIndex !== undefined ? Number(req.body.chunkIndex) : undefined
+    const totalChunks = req.body.totalChunks !== undefined ? Number(req.body.totalChunks) : undefined
+
+    if (!uploadId || chunkIndex === undefined || totalChunks === undefined || !req.file || !fileName || !orderId) {
+      res.status(400).json({ message: 'Missing required chunk parameters or file chunk' })
+      return
+    }
+
+    const parsedOrderId = parseOrderId(String(orderId))
+    if (!parsedOrderId) {
+      res.status(400).json({ message: 'Invalid order ID' })
+      return
+    }
+
+    const tempDir = path.resolve(process.cwd(), 'uploads/temp', uploadId)
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true })
+    }
+
+    const chunkPath = path.join(tempDir, `${chunkIndex}.part`)
+    fs.writeFileSync(chunkPath, req.file.buffer)
+
+    // Check if we have received all chunks
+    const files = fs.readdirSync(tempDir)
+    if (files.length === totalChunks) {
+      // Reassemble the chunks
+      const chunkBuffers: Buffer[] = []
+      for (let i = 0; i < totalChunks; i++) {
+        const partPath = path.join(tempDir, `${i}.part`)
+        if (!fs.existsSync(partPath)) {
+          res.status(400).json({ message: `Missing chunk index ${i}` })
+          return
+        }
+        chunkBuffers.push(fs.readFileSync(partPath))
+      }
+      const fullBuffer = Buffer.concat(chunkBuffers)
+
+      // Convert fullBuffer to a base64 string
+      const base64Data = fullBuffer.toString('base64')
+
+      // Save attachment with prefix
+      const finalBase64 = prefix && prefix !== 'raw' ? `${prefix}:${base64Data}` : base64Data
+      const decompressedBase64 = decompressBase64(finalBase64)
+
+      // Add to order (will be written to filesystem inside the service)
+      const attachment = await addAttachmentToOrder(parsedOrderId, {
+        FileName: fileName,
+        MimeType: mimeType || 'application/octet-stream',
+        Base64Data: decompressedBase64 ?? ''
+      })
+
+      // Clean up temporary chunks
+      for (let i = 0; i < totalChunks; i++) {
+        try {
+          fs.unlinkSync(path.join(tempDir, `${i}.part`))
+        } catch {}
+      }
+      try {
+        fs.rmdirSync(tempDir)
+      } catch {}
+
+      res.status(201).json({ message: 'File uploaded and assembled successfully', data: attachment })
+    } else {
+      res.status(200).json({ message: `Chunk ${chunkIndex + 1}/${totalChunks} received successfully` })
+    }
+  } catch (error) {
+    console.error('Error in uploadChunkHandler:', error)
+    res.status(500).json({ message: 'Server error during chunk upload' })
+  }
+}
+
 export const orderController = {
   create: createOrderHandler,
   getById: getOrderDetailHandler,
@@ -464,7 +559,9 @@ export const orderController = {
   updateStatus: updateOrderStatusHandler,
   cancel: cancelOrderHandler,
   getAttachments: getAttachmentsHandler,
+  getAttachmentById: getAttachmentByIdHandler,
   addAttachment: addAttachmentHandler,
+  uploadChunk: uploadChunkHandler,
   deleteAttachment: deleteAttachmentHandler
 }
 

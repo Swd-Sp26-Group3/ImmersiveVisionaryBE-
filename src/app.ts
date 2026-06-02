@@ -23,8 +23,6 @@ import { errorMiddleware } from './middlewares/errorMiddleware'
 
 const app = express()
 app.set('trust proxy', 1)
-app.use(express.json({ limit: '50mb' }))
-app.use(express.urlencoded({ limit: '50mb', extended: true }))
 
 const corsOptions = {
   origin: config.cors.origin,
@@ -33,11 +31,13 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization']
 }
 
-// ✅ CORS must come FIRST — before helmet and rate-limiter
-// so that OPTIONS preflight requests are handled immediately
+// ✅ CORS must come FIRST — before helmet, body-parsers, and rate-limiter
+// so that OPTIONS preflight requests and payload error responses contain the correct CORS headers
 app.use(cors(corsOptions))
 app.options('*', cors(corsOptions)) // handle all preflight requests
 
+app.use(express.json({ limit: '200mb' }))
+app.use(express.urlencoded({ limit: '200mb', extended: true }))
 
 app.use(helmet())
 

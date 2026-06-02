@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import sql from 'mssql'
 import { getDbPool } from '../config/database'
 
@@ -594,8 +596,31 @@ export const getAttachmentsForOrder = async (orderId: number): Promise<any[]> =>
   const pool = await getDbPool()
   const result = await pool.request()
     .input('OrderId', sql.Int, orderId)
-    .query('SELECT * FROM OrderAttachment WHERE OrderId = @OrderId ORDER BY CreatedAt DESC')
+    .query('SELECT AttachmentId, OrderId, FileName, MimeType, CreatedAt FROM OrderAttachment WHERE OrderId = @OrderId ORDER BY CreatedAt DESC')
   return result.recordset
+}
+
+export const getAttachmentById = async (attachmentId: number): Promise<any | null> => {
+  const pool = await getDbPool()
+  const result = await pool.request()
+    .input('AttachmentId', sql.Int, attachmentId)
+    .query('SELECT * FROM OrderAttachment WHERE AttachmentId = @AttachmentId')
+  if (result.recordset.length === 0) return null
+  const record = result.recordset[0]
+  if (record.Base64Data && record.Base64Data.startsWith('file:')) {
+    const filePath = record.Base64Data.slice(5) // strip 'file:'
+    const absolutePath = path.resolve(process.cwd(), filePath)
+    if (fs.existsSync(absolutePath)) {
+      try {
+        record.Base64Data = fs.readFileSync(absolutePath, 'utf8')
+      } catch (err) {
+        console.error(`Failed to read attachment file from disk: ${absolutePath}`, err)
+      }
+    } else {
+      console.error(`Attachment file not found on disk at: ${absolutePath}`)
+    }
+  }
+  return record
 }
 
 export const addAttachmentToOrder = async (orderId: number, attachment: { FileName: string; MimeType: string; Base64Data: string }): Promise<any> => {
@@ -604,17 +629,61 @@ export const addAttachmentToOrder = async (orderId: number, attachment: { FileNa
     .input('OrderId', sql.Int, orderId)
     .input('FileName', sql.NVarChar(200), attachment.FileName)
     .input('MimeType', sql.NVarChar(100), attachment.MimeType)
-    .input('Base64Data', sql.VarChar(sql.MAX), attachment.Base64Data)
+    .input('Base64Data', sql.VarChar(sql.MAX), 'pending')
     .query(`
       INSERT INTO OrderAttachment (OrderId, FileName, MimeType, Base64Data)
       OUTPUT INSERTED.*
       VALUES (@OrderId, @FileName, @MimeType, @Base64Data)
     `)
-  return result.recordset[0]
+  const record = result.recordset[0]
+  const attachmentId = record.AttachmentId
+
+  // Write file to uploads/attachments/
+  const relativeDir = 'uploads/attachments'
+  const absoluteDir = path.resolve(process.cwd(), relativeDir)
+  if (!fs.existsSync(absoluteDir)) {
+    fs.mkdirSync(absoluteDir, { recursive: true })
+  }
+  const fileNameOnDisk = `${attachmentId}_${attachment.FileName.replace(/[^a-zA-Z0-9._-]/g, '_')}.txt`
+  const relativePath = path.join(relativeDir, fileNameOnDisk)
+  const absolutePath = path.join(absoluteDir, fileNameOnDisk)
+
+  fs.writeFileSync(absolutePath, attachment.Base64Data, 'utf8')
+
+  // Update DB with the file path reference
+  const dbPath = `file:${relativePath.replace(/\\/g, '/')}`
+  await pool.request()
+    .input('AttachmentId', sql.Int, attachmentId)
+    .input('Base64Data', sql.VarChar(sql.MAX), dbPath)
+    .query('UPDATE OrderAttachment SET Base64Data = @Base64Data WHERE AttachmentId = @AttachmentId')
+
+  record.Base64Data = attachment.Base64Data
+  return record
 }
 
 export const deleteAttachment = async (attachmentId: number): Promise<void> => {
   const pool = await getDbPool()
+  
+  // Get the file reference before deleting the row
+  const getRes = await pool.request()
+    .input('AttachmentId', sql.Int, attachmentId)
+    .query('SELECT Base64Data FROM OrderAttachment WHERE AttachmentId = @AttachmentId')
+  
+  if (getRes.recordset.length > 0) {
+    const base64Data = getRes.recordset[0].Base64Data
+    if (base64Data && base64Data.startsWith('file:')) {
+      const filePath = base64Data.slice(5)
+      const absolutePath = path.resolve(process.cwd(), filePath)
+      if (fs.existsSync(absolutePath)) {
+        try {
+          fs.unlinkSync(absolutePath)
+        } catch (err) {
+          console.error(`Failed to delete attachment file from disk: ${absolutePath}`, err)
+        }
+      }
+    }
+  }
+
   const result = await pool.request()
     .input('AttachmentId', sql.Int, attachmentId)
     .query('DELETE FROM OrderAttachment WHERE AttachmentId = @AttachmentId')

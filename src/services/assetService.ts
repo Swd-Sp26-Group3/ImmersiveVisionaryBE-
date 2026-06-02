@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import sql from 'mssql'
 import { getDbPool } from '../config/database'
 
@@ -68,7 +70,7 @@ export const createAsset = async (createdBy: number, payload: CreateAssetInput):
     .input('IsMarketplace', sql.Bit, payload.IsMarketplace ?? false)
     .input('Category', sql.NVarChar(100), payload.Category ?? null)
     .input('Industry', sql.NVarChar(100), payload.Industry ?? null)
-    .input('Base64Data', sql.VarChar(sql.MAX), payload.Base64Data ?? null)
+    .input('Base64Data', sql.VarChar(sql.MAX), 'pending')
     .input('PublishStatus', sql.NVarChar(50), 'DRAFT')
     .query(`
       INSERT INTO [Asset3D] (
@@ -104,7 +106,35 @@ export const createAsset = async (createdBy: number, payload: CreateAssetInput):
       )
     `)
 
-  return result.recordset[0]
+  const record = result.recordset[0]
+  if (payload.Base64Data) {
+    const assetId = record.AssetId
+    const relativeDir = 'uploads/assets'
+    const absoluteDir = path.resolve(process.cwd(), relativeDir)
+    if (!fs.existsSync(absoluteDir)) {
+      fs.mkdirSync(absoluteDir, { recursive: true })
+    }
+    const fileNameOnDisk = `${assetId}_${payload.AssetName.replace(/[^a-zA-Z0-9._-]/g, '_')}.txt`
+    const relativePath = path.join(relativeDir, fileNameOnDisk)
+    const absolutePath = path.join(absoluteDir, fileNameOnDisk)
+
+    fs.writeFileSync(absolutePath, payload.Base64Data, 'utf8')
+
+    const dbPath = `file:${relativePath.replace(/\\/g, '/')}`
+    await pool.request()
+      .input('AssetId', sql.Int, assetId)
+      .input('Base64Data', sql.VarChar(sql.MAX), dbPath)
+      .query('UPDATE [Asset3D] SET Base64Data = @Base64Data WHERE AssetId = @AssetId')
+
+    record.Base64Data = payload.Base64Data
+  } else {
+    await pool.request()
+      .input('AssetId', sql.Int, record.AssetId)
+      .query('UPDATE [Asset3D] SET Base64Data = NULL WHERE AssetId = @AssetId')
+    record.Base64Data = null
+  }
+
+  return record
 }
 
 export const getAssetById = async (assetId: number): Promise<Asset3D | null> => {
@@ -120,7 +150,22 @@ export const getAssetById = async (assetId: number): Promise<Asset3D | null> => 
     return null
   }
 
-  return result.recordset[0]
+  const record = result.recordset[0]
+  if (record.Base64Data && record.Base64Data.startsWith('file:')) {
+    const filePath = record.Base64Data.slice(5) // strip 'file:'
+    const absolutePath = path.resolve(process.cwd(), filePath)
+    if (fs.existsSync(absolutePath)) {
+      try {
+        record.Base64Data = fs.readFileSync(absolutePath, 'utf8')
+      } catch (err) {
+        console.error(`Failed to read asset file from disk: ${absolutePath}`, err)
+      }
+    } else {
+      console.error(`Asset file not found on disk at: ${absolutePath}`)
+    }
+  }
+
+  return record
 }
 
 // Publish pending or draft on Artist page
@@ -175,6 +220,40 @@ export const listMarketplaceAssets = async (): Promise<Asset3D[]> => {
 export const updateAsset = async (assetId: number, payload: UpdateAssetInput): Promise<Asset3D> => {
   const pool = await getDbPool()
 
+  let dbBase64Data: string | undefined = undefined
+  if (payload.Base64Data !== undefined) {
+    if (payload.Base64Data) {
+      const assetRes = await pool.request().input('AssetId', sql.Int, assetId).query('SELECT AssetName FROM [Asset3D] WHERE AssetId = @AssetId')
+      const assetName = assetRes.recordset[0]?.AssetName || 'asset'
+      const relativeDir = 'uploads/assets'
+      const absoluteDir = path.resolve(process.cwd(), relativeDir)
+      if (!fs.existsSync(absoluteDir)) {
+        fs.mkdirSync(absoluteDir, { recursive: true })
+      }
+      const fileNameOnDisk = `${assetId}_${assetName.replace(/[^a-zA-Z0-9._-]/g, '_')}.txt`
+      const relativePath = path.join(relativeDir, fileNameOnDisk)
+      const absolutePath = path.join(absoluteDir, fileNameOnDisk)
+
+      fs.writeFileSync(absolutePath, payload.Base64Data, 'utf8')
+      dbBase64Data = `file:${relativePath.replace(/\\/g, '/')}`
+    } else {
+      const getRes = await pool.request()
+        .input('AssetId', sql.Int, assetId)
+        .query('SELECT Base64Data FROM [Asset3D] WHERE AssetId = @AssetId')
+      if (getRes.recordset.length > 0) {
+        const base64Data = getRes.recordset[0].Base64Data
+        if (base64Data && base64Data.startsWith('file:')) {
+          const filePath = base64Data.slice(5)
+          const absolutePath = path.resolve(process.cwd(), filePath)
+          if (fs.existsSync(absolutePath)) {
+            try { fs.unlinkSync(absolutePath) } catch {}
+          }
+        }
+      }
+      dbBase64Data = null as any
+    }
+  }
+
   const setParts: string[] = []
   const request = pool.request().input('AssetId', sql.Int, assetId).input('UpdatedAt', sql.DateTime, new Date())
 
@@ -228,9 +307,9 @@ export const updateAsset = async (assetId: number, payload: UpdateAssetInput): P
     request.input('Industry', sql.NVarChar(100), payload.Industry)
   }
 
-  if (payload.Base64Data !== undefined) {
+  if (dbBase64Data !== undefined) {
     setParts.push('Base64Data = @Base64Data')
-    request.input('Base64Data', sql.VarChar(sql.MAX), payload.Base64Data)
+    request.input('Base64Data', sql.VarChar(sql.MAX), dbBase64Data)
   }
 
   if (setParts.length === 0) {
@@ -250,11 +329,34 @@ export const updateAsset = async (assetId: number, payload: UpdateAssetInput): P
     throw new Error('ASSET_NOT_FOUND')
   }
 
-  return result.recordset[0]
+  const record = result.recordset[0]
+  if (payload.Base64Data !== undefined) {
+    record.Base64Data = payload.Base64Data
+  }
+  return record
 }
 
 export const deleteAsset = async (assetId: number): Promise<void> => {
   const pool = await getDbPool()
+
+  const getRes = await pool.request()
+    .input('AssetId', sql.Int, assetId)
+    .query('SELECT Base64Data FROM [Asset3D] WHERE AssetId = @AssetId')
+  
+  if (getRes.recordset.length > 0) {
+    const base64Data = getRes.recordset[0].Base64Data
+    if (base64Data && base64Data.startsWith('file:')) {
+      const filePath = base64Data.slice(5)
+      const absolutePath = path.resolve(process.cwd(), filePath)
+      if (fs.existsSync(absolutePath)) {
+        try {
+          fs.unlinkSync(absolutePath)
+        } catch (err) {
+          console.error(`Failed to delete asset file from disk: ${absolutePath}`, err)
+        }
+      }
+    }
+  }
 
   const result = await pool
     .request()
@@ -262,7 +364,7 @@ export const deleteAsset = async (assetId: number): Promise<void> => {
     .input('UpdatedAt', sql.DateTime, new Date())
     .query(`
       UPDATE [Asset3D]
-      SET IsDeleted = 1, UpdatedAt = @UpdatedAt
+      SET IsDeleted = 1, Base64Data = NULL, UpdatedAt = @UpdatedAt
       WHERE AssetId = @AssetId AND IsDeleted = 0
     `)
 

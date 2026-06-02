@@ -23,6 +23,7 @@ import { errorMiddleware } from './middlewares/errorMiddleware'
 
 const app = express()
 app.set('trust proxy', 1)
+app.set('etag', false)
 
 const corsOptions = {
   origin: config.cors.origin,

@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import zlib from 'zlib'
 import type { Response } from 'express'
 import type { AuthRequest } from '../middlewares/authMiddleware'
@@ -32,6 +34,105 @@ export const decompressBase64 = (raw: string | null | undefined): string | null 
   } catch (e) {
     console.error('[decompressBase64] Failed to decompress:', e)
     throw new Error('INVALID_COMPRESSED_DATA')
+  }
+}
+
+export const resolveUploadedBase64 = (parsedBase64Data: string | null | undefined, uploadId: unknown): string | null | undefined => {
+  if (uploadId) {
+    if (typeof uploadId !== 'string') {
+      throw new Error('INVALID_UPLOAD_ID')
+    }
+    const tempDir = path.resolve(process.cwd(), 'uploads/temp', uploadId)
+    const assembledPath = path.join(tempDir, 'assembled.bin')
+    const metadataPath = path.join(tempDir, 'metadata.json')
+
+    if (fs.existsSync(assembledPath)) {
+      const fullBuffer = fs.readFileSync(assembledPath)
+      const base64Str = fullBuffer.toString('base64')
+
+      let prefix = ''
+      if (fs.existsSync(metadataPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metadataPath, 'utf8'))
+          prefix = meta.prefix || ''
+        } catch {}
+      }
+
+      const finalBase64 = prefix && prefix !== 'raw' ? `${prefix}:${base64Str}` : base64Str
+
+      // Clean up temporary files
+      try {
+        fs.unlinkSync(assembledPath)
+        if (fs.existsSync(metadataPath)) fs.unlinkSync(metadataPath)
+        fs.rmdirSync(tempDir)
+      } catch (cleanupErr) {
+        console.error('[resolveUploadedBase64] Temp cleanup failed:', cleanupErr)
+      }
+
+      return finalBase64
+    } else {
+      throw new Error('UPLOADED_FILE_NOT_FOUND')
+    }
+  }
+  return parsedBase64Data
+}
+
+export const uploadChunkHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { uploadId, prefix, fileName } = req.body
+    const chunkIndex = req.body.chunkIndex !== undefined ? Number(req.body.chunkIndex) : undefined
+    const totalChunks = req.body.totalChunks !== undefined ? Number(req.body.totalChunks) : undefined
+
+    if (!uploadId || chunkIndex === undefined || totalChunks === undefined || !req.file || !fileName) {
+      res.status(400).json({ message: 'Missing required chunk parameters or file chunk' })
+      return
+    }
+
+    const tempDir = path.resolve(process.cwd(), 'uploads/temp', uploadId)
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true })
+    }
+
+    const chunkPath = path.join(tempDir, `${chunkIndex}.part`)
+    fs.writeFileSync(chunkPath, req.file.buffer)
+
+    // Check if we have received all chunks
+    const files = fs.readdirSync(tempDir).filter(f => f.endsWith('.part'))
+    if (files.length === totalChunks) {
+      // Reassemble the chunks
+      const chunkBuffers: Buffer[] = []
+      for (let i = 0; i < totalChunks; i++) {
+        const partPath = path.join(tempDir, `${i}.part`)
+        if (!fs.existsSync(partPath)) {
+          res.status(400).json({ message: `Missing chunk index ${i}` })
+          return
+        }
+        chunkBuffers.push(fs.readFileSync(partPath))
+      }
+      const fullBuffer = Buffer.concat(chunkBuffers)
+
+      // Write assembled buffer to a temporary file
+      const assembledPath = path.join(tempDir, 'assembled.bin')
+      fs.writeFileSync(assembledPath, fullBuffer)
+
+      // Write metadata (prefix, fileName)
+      const metadata = { prefix, fileName }
+      fs.writeFileSync(path.join(tempDir, 'metadata.json'), JSON.stringify(metadata), 'utf8')
+
+      // Clean up temporary part chunks
+      for (let i = 0; i < totalChunks; i++) {
+        try {
+          fs.unlinkSync(path.join(tempDir, `${i}.part`))
+        } catch {}
+      }
+
+      res.status(201).json({ message: 'File uploaded and assembled successfully', uploadId })
+    } else {
+      res.status(200).json({ message: `Chunk ${chunkIndex + 1}/${totalChunks} received successfully` })
+    }
+  } catch (error) {
+    console.error('Error in asset uploadChunkHandler:', error)
+    res.status(500).json({ message: 'Server error during chunk upload' })
   }
 }
 
@@ -127,7 +228,7 @@ export const createAssetHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
-    const { OrderId, AssetName, Description, PreviewImage, OwnerCompanyId, AssetType, Price, IsMarketplace, Category, Industry, Base64Data } =
+    const { OrderId, AssetName, Description, PreviewImage, OwnerCompanyId, AssetType, Price, IsMarketplace, Category, Industry, Base64Data, UploadId } =
       req.body
 
     if (OrderId !== undefined && parseOptionalInt(OrderId) === undefined) {
@@ -187,10 +288,24 @@ export const createAssetHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
-    const parsedBase64Data = parseOptionalString(Base64Data)
+    let parsedBase64Data = parseOptionalString(Base64Data)
     if (Base64Data !== undefined && parsedBase64Data === undefined) {
       res.status(400).json({ message: 'Base64Data must be a string or null' })
       return
+    }
+
+    try {
+      parsedBase64Data = resolveUploadedBase64(parsedBase64Data, UploadId)
+    } catch (err: any) {
+      if (err.message === 'INVALID_UPLOAD_ID') {
+        res.status(400).json({ message: 'UploadId must be a string' })
+        return
+      }
+      if (err.message === 'UPLOADED_FILE_NOT_FOUND') {
+        res.status(400).json({ message: 'Assembled upload not found. The upload session may have timed out or failed.' })
+        return
+      }
+      throw err
     }
 
     // Decompress if the FE sent a gzip-compressed payload
@@ -285,7 +400,7 @@ export const updateAssetHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
-    const { OrderId, AssetName, Description, PreviewImage, OwnerCompanyId, AssetType, Price, IsMarketplace, Category, Industry, Base64Data } =
+    const { OrderId, AssetName, Description, PreviewImage, OwnerCompanyId, AssetType, Price, IsMarketplace, Category, Industry, Base64Data, UploadId } =
       req.body
 
     if (OrderId !== undefined && parseOptionalInt(OrderId) === undefined) {
@@ -345,10 +460,24 @@ export const updateAssetHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
-    const parsedBase64Data = parseOptionalString(Base64Data)
+    let parsedBase64Data = parseOptionalString(Base64Data)
     if (Base64Data !== undefined && parsedBase64Data === undefined) {
       res.status(400).json({ message: 'Base64Data must be a string or null' })
       return
+    }
+
+    try {
+      parsedBase64Data = resolveUploadedBase64(parsedBase64Data, UploadId)
+    } catch (err: any) {
+      if (err.message === 'INVALID_UPLOAD_ID') {
+        res.status(400).json({ message: 'UploadId must be a string' })
+        return
+      }
+      if (err.message === 'UPLOADED_FILE_NOT_FOUND') {
+        res.status(400).json({ message: 'Assembled upload not found. The upload session may have timed out or failed.' })
+        return
+      }
+      throw err
     }
 
     // Decompress if the FE sent a gzip-compressed payload
@@ -549,7 +678,8 @@ export const assetController = {
   listMarketplace: listMarketplaceAssetsHandler,
   listMy: listMyAssetsHandler,
   submit: submitAssetHandler,
-  approve: approveAssetHandler
+  approve: approveAssetHandler,
+  uploadChunk: uploadChunkHandler
 }
 
 export default assetController

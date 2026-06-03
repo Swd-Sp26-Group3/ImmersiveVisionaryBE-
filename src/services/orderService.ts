@@ -541,6 +541,38 @@ export const cancelOrderForCustomer = async (orderId: number, userId: number): P
   const companyId = await getUserCompanyId(userId)
   const pool = await getDbPool()
 
+  // ── 24-hour cancel window check ──────────────────────────────────────────────
+  // Fetch the order first to validate ownership and timing before attempting cancel.
+  const checkReq = await pool.request()
+    .input('OrderId', sql.Int, orderId)
+    .query(`SELECT OrderId, CompanyId, CreatedByUserId, Status, CreatedAt FROM [CreativeOrder] WHERE OrderId = @OrderId AND IsDeleted = 0`)
+
+  if (checkReq.recordset.length === 0) {
+    throw new Error('ORDER_NOT_FOUND')
+  }
+
+  const existing = checkReq.recordset[0] as {
+    CompanyId: number | null; CreatedByUserId: number | null;
+    Status: CreativeOrderStatus; CreatedAt: Date
+  }
+
+  // Authorization check
+  if (existing.CompanyId !== companyId && existing.CreatedByUserId !== userId) {
+    throw new Error('ORDER_FORBIDDEN')
+  }
+
+  if (existing.Status === 'CANCELLED') {
+    throw new Error('ORDER_ALREADY_CANCELLED')
+  }
+
+  // 24-hour window enforcement (server-side, cannot be bypassed from the client)
+  const createdAt = new Date(existing.CreatedAt).getTime()
+  const elapsed = Date.now() - createdAt
+  if (elapsed > 24 * 60 * 60 * 1000) {
+    throw new Error('ORDER_CANCEL_WINDOW_EXPIRED')
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // Build WHERE clause that works regardless of whether the user has a companyId
   const cancelReq = pool.request()
     .input('OrderId', sql.Int, orderId)
@@ -565,29 +597,6 @@ export const cancelOrderForCustomer = async (orderId: number, userId: number): P
 
   if (result.recordset.length > 0) {
     return result.recordset[0]
-  }
-
-  const existingOrder = await pool.request()
-    .input('OrderId', sql.Int, orderId)
-    .input('CheckUserId', sql.Int, userId)
-    .query(`
-      SELECT OrderId, CompanyId, CreatedByUserId, Status
-      FROM [CreativeOrder]
-      WHERE OrderId = @OrderId AND IsDeleted = 0
-    `)
-
-  if (existingOrder.recordset.length === 0) {
-    throw new Error('ORDER_NOT_FOUND')
-  }
-
-  const order = existingOrder.recordset[0] as { CompanyId: number | null; CreatedByUserId: number | null; Status: CreativeOrderStatus }
-
-  if (order.CompanyId !== companyId && order.CreatedByUserId !== userId) {
-    throw new Error('ORDER_FORBIDDEN')
-  }
-
-  if (order.Status === 'CANCELLED') {
-    throw new Error('ORDER_ALREADY_CANCELLED')
   }
 
   throw new Error('ORDER_CANCEL_FAILED')

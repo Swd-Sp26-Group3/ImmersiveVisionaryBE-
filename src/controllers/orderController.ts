@@ -398,6 +398,11 @@ export const cancelOrderHandler = async (req: AuthRequest, res: Response): Promi
       return
     }
 
+    if (error.message === 'ORDER_CANCEL_WINDOW_EXPIRED') {
+      res.status(403).json({ message: 'Đơn hàng chỉ có thể hủy trong vòng 24 giờ kể từ khi tạo' })
+      return
+    }
+
     if (error.message === 'ORDER_ALREADY_CANCELLED') {
       res.status(400).json({ message: 'Order is already cancelled' })
       return

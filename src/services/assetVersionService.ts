@@ -76,3 +76,27 @@ export const getAssetVersionById = async (versionId: number): Promise<AssetVersi
 
   return result.recordset[0]
 }
+
+export const deleteAssetVersion = async (versionId: number): Promise<boolean> => {
+  const pool = await getDbPool()
+  const result = await pool
+    .request()
+    .input('VersionId', sql.Int, versionId)
+    .query(`DELETE FROM [AssetVersion] WHERE VersionId = @VersionId`)
+  return (result.rowsAffected[0] ?? 0) > 0
+}
+
+export const activateAssetVersion = async (versionId: number, assetId: number): Promise<boolean> => {
+  const pool = await getDbPool()
+  const result = await pool
+    .request()
+    .input('VersionId', sql.Int, versionId)
+    .input('AssetId', sql.Int, assetId)
+    .query(`
+      UPDATE [Asset3D]
+      SET Base64Data = (SELECT Base64Data FROM [AssetVersion] WHERE VersionId = @VersionId),
+          UpdatedAt  = GETDATE()
+      WHERE AssetId = @AssetId
+    `)
+  return (result.rowsAffected[0] ?? 0) > 0
+}

@@ -5,6 +5,8 @@ import {
   createAssetVersion,
   getAssetVersions,
   getAssetVersionById,
+  deleteAssetVersion,
+  activateAssetVersion,
   type FileFormat
 } from '../services/assetVersionService'
 
@@ -75,7 +77,15 @@ export const uploadVersionHandler = async (req: AuthRequest, res: Response): Pro
     console.error('Error in uploadVersionHandler:', error)
 
     if (error?.number === 547) {
-      res.status(400).json({ message: 'Asset does not exist' })
+      // 547 = FK violation (asset not found) OR CHECK constraint violation (invalid FileFormat)
+      const detail = error?.originalError?.message ?? error?.message ?? '';
+      const isCheckConstraint = detail.includes('CHECK constraint') || detail.includes('CK_');
+      res.status(400).json({
+        message: isCheckConstraint
+          ? `Invalid FileFormat value. Allowed: ${ALLOWED_FILE_FORMATS.join(', ')}`
+          : 'Asset does not exist',
+        detail
+      })
       return
     }
 
@@ -145,10 +155,39 @@ export const downloadVersionHandler = async (req: AuthRequest, res: Response): P
   }
 }
 
+export const deleteVersionHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const versionId = parseId(req.params.id)
+    if (!versionId) { res.status(400).json({ message: 'Version ID is invalid' }); return }
+    const deleted = await deleteAssetVersion(versionId)
+    if (!deleted) { res.status(404).json({ message: 'Version not found' }); return }
+    res.status(200).json({ message: 'Version deleted successfully' })
+  } catch (error) {
+    console.error('Error in deleteVersionHandler:', error)
+    res.status(500).json({ message: 'Server error while deleting version' })
+  }
+}
+
+export const activateVersionHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const versionId = parseId(req.params.id)
+    const assetId = parseId(req.params.assetId)
+    if (!versionId || !assetId) { res.status(400).json({ message: 'Invalid ID' }); return }
+    const ok = await activateAssetVersion(versionId, assetId)
+    if (!ok) { res.status(404).json({ message: 'Version or asset not found' }); return }
+    res.status(200).json({ message: 'Version activated successfully' })
+  } catch (error) {
+    console.error('Error in activateVersionHandler:', error)
+    res.status(500).json({ message: 'Server error while activating version' })
+  }
+}
+
 export const assetVersionController = {
   upload: uploadVersionHandler,
   getVersions: getVersionsHandler,
-  download: downloadVersionHandler
+  download: downloadVersionHandler,
+  delete: deleteVersionHandler,
+  activate: activateVersionHandler,
 }
 
 export default assetVersionController

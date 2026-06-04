@@ -259,7 +259,7 @@ BEGIN
 
     Base64Data VARCHAR(MAX) NULL,
 
-    CONSTRAINT CK_AssetVersion_FileFormat CHECK (FileFormat IN (N'GLB', N'USDZ', N'FBX', N'WEBAR')),
+    CONSTRAINT CK_AssetVersion_FileFormat CHECK (FileFormat IN (N'GLB', N'USDZ', N'FBX', N'WEBAR', N'OBJ')),
 
     CONSTRAINT FK_AssetVersion_Asset FOREIGN KEY (AssetId) REFERENCES dbo.Asset3D(AssetId) ON DELETE CASCADE
   );
@@ -268,8 +268,26 @@ ELSE
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE name = N'Base64Data' AND object_id = OBJECT_ID(N'dbo.AssetVersion'))
     ALTER TABLE dbo.AssetVersion ADD Base64Data VARCHAR(MAX) NULL;
+
+  -- Add 'OBJ' to FileFormat CHECK constraint if not already updated
+  IF EXISTS (
+    SELECT 1 FROM sys.check_constraints
+    WHERE name IN (N'CK_AssetVersion_FileFormat', N'CK__AssetVers__FileF__70DDC3D8')
+      AND parent_object_id = OBJECT_ID(N'dbo.AssetVersion')
+      AND [definition] NOT LIKE N'%OBJ%'
+  )
+  BEGIN
+    -- Drop whichever constraint name exists
+    IF OBJECT_ID(N'dbo.CK_AssetVersion_FileFormat') IS NOT NULL
+      ALTER TABLE dbo.AssetVersion DROP CONSTRAINT CK_AssetVersion_FileFormat;
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK__AssetVers__FileF__70DDC3D8' AND parent_object_id = OBJECT_ID(N'dbo.AssetVersion'))
+      ALTER TABLE dbo.AssetVersion DROP CONSTRAINT [CK__AssetVers__FileF__70DDC3D8];
+    ALTER TABLE dbo.AssetVersion ADD CONSTRAINT CK_AssetVersion_FileFormat
+      CHECK (FileFormat IN (N'GLB', N'USDZ', N'FBX', N'WEBAR', N'OBJ'));
+  END
 END
 GO
+
 
 -- MARKETPLACE ORDER
 IF OBJECT_ID(N'dbo.MarketplaceOrder', N'U') IS NULL

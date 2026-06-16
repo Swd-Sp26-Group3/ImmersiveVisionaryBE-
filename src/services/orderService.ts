@@ -55,6 +55,67 @@ export interface CreateOrderInput {
   Attachments?: { FileName: string; MimeType: string; Base64Data: string }[]
 }
 
+export const parseBudgetToPrice = (budgetStr: string): number => {
+  if (!budgetStr) return 0
+
+  const str = budgetStr.toLowerCase().trim()
+
+  const parseSingleValue = (valStr: string): number => {
+    let s = valStr.replace(/\s+/g, '')
+    
+    if (s.includes('m') || s.includes('tr') || s.includes('trieu') || s.includes('triệu')) {
+      const normalized = s.replace(/,/g, '.')
+      const numPart = parseFloat(normalized.replace(/[^0-9.]/g, '')) || 0
+      return numPart * 1000000
+    }
+
+    if (s.includes('k')) {
+      const normalized = s.replace(/,/g, '.')
+      const numPart = parseFloat(normalized.replace(/[^0-9.]/g, '')) || 0
+      return numPart * 1000
+    }
+
+    const hasMultipleDotsOrCommas = (s.match(/[.,]/g) || []).length > 1
+    if (hasMultipleDotsOrCommas) {
+      s = s.replace(/[.,]/g, '')
+    } else {
+      const dotIdx = s.indexOf('.')
+      const commaIdx = s.indexOf(',')
+      const idx = dotIdx !== -1 ? dotIdx : commaIdx
+      if (idx !== -1) {
+        const after = s.slice(idx + 1)
+        if (after.length === 3 && !isNaN(Number(after))) {
+          s = s.replace(/[.,]/g, '')
+        } else {
+          s = s.replace(/,/g, '.')
+        }
+      }
+    }
+
+    const numPart = parseFloat(s.replace(/[^0-9.]/g, '')) || 0
+
+    if (numPart > 0 && numPart < 50000) {
+      return numPart * 1000
+    }
+
+    return numPart
+  }
+
+  const rangeSeparators = ['-', 'to', 'đến', '/']
+  for (const sep of rangeSeparators) {
+    if (str.includes(sep)) {
+      const parts = str.split(sep)
+      if (parts.length === 2) {
+        const val1 = parseSingleValue(parts[0])
+        const val2 = parseSingleValue(parts[1])
+        return Math.max(val1, val2)
+      }
+    }
+  }
+
+  return parseSingleValue(str)
+}
+
 const getUserCompanyId = async (userId: number): Promise<number | null> => {
   const pool = await getDbPool()
 
@@ -365,60 +426,62 @@ export const updateOrderStatus = async (
     // so it shows up in the customer's Purchases tab.
     if (status === 'DELIVERED') {
       try {
-        // 1. Get final .obj attachment
+        // 1. Get final attachment (prioritizing 3D/zip files)
         const attRes = await request.input('CompOrderId', sql.Int, orderId).query(`
           SELECT TOP 1 FileName, Base64Data 
           FROM OrderAttachment 
-          WHERE OrderId = @CompOrderId AND FileName LIKE '%.obj'
-          ORDER BY CreatedAt DESC
+          WHERE OrderId = @CompOrderId
+          ORDER BY 
+            CASE 
+              WHEN FileName LIKE '%.obj' OR FileName LIKE '%.glb' OR FileName LIKE '%.gltf' OR FileName LIKE '%.zip' OR FileName LIKE '%.blend' THEN 0
+              ELSE 1
+            END,
+            CreatedAt DESC
         `)
         const finalAtt = attRes.recordset[0]
+        const assetBase64 = finalAtt ? finalAtt.Base64Data : 'data:application/octet-stream;base64,cGxhY2Vob2xkZXI='
 
-        if (finalAtt) {
-          // 2. Extract price from Budget (e.g. "5000000 VND" -> 5000000)
-          const budgetStr = order.Budget || "0"
-          const numericPrice = parseFloat(budgetStr.replace(/[^0-9.]/g, '')) || 0
+        // 2. Extract price from Budget (using smart parser)
+        const budgetStr = order.Budget || "0"
+        const numericPrice = parseBudgetToPrice(budgetStr)
 
-          // 3. Get Seller (Artist) from ProductionStage
-          const psRes = await request.query(`
-            SELECT TOP 1 AssignedTo FROM ProductionStage WHERE OrderId = @CompOrderId
+        // 3. Get Seller (Artist) from ProductionStage
+        const psRes = await request.query(`
+          SELECT TOP 1 AssignedTo FROM ProductionStage WHERE OrderId = @CompOrderId
+        `)
+        const sellerId = psRes.recordset[0]?.AssignedTo || 1
+
+        // 4. Create Asset3D for this delivery
+        const assetRes = await request
+          .input('AssetName', sql.NVarChar(200), order.ProjectName || `Result for #${orderId}`)
+          .input('AssetOwnerId', sql.Int, order.CompanyId)
+          .input('CreatedByArtist', sql.Int, sellerId)
+          .input('AssetPrice', sql.Decimal(18, 2), numericPrice)
+          .input('AssetBase64', sql.VarChar(sql.MAX), assetBase64)
+          .query(`
+            INSERT INTO [Asset3D] (OrderId, AssetName, OwnerCompanyId, CreatedBy, AssetType, Price, Base64Data, PublishStatus, IsMarketplace)
+            OUTPUT INSERTED.AssetId
+            VALUES (@CompOrderId, @AssetName, @AssetOwnerId, @CreatedByArtist, 'ORDER', @AssetPrice, @AssetBase64, 'PUBLISHED', 0)
           `)
-          const sellerId = psRes.recordset[0]?.AssignedTo
+        const newAssetId = assetRes.recordset[0].AssetId
 
-          if (sellerId) {
-            // 4. Create Asset3D for this delivery
-            const assetRes = await request
-              .input('AssetName', sql.NVarChar(200), order.ProjectName || `Result for #${orderId}`)
-              .input('AssetOwnerId', sql.Int, order.CompanyId)
-              .input('CreatedByArtist', sql.Int, sellerId)
-              .input('AssetPrice', sql.Decimal(18, 2), numericPrice)
-              .input('AssetBase64', sql.VarChar(sql.MAX), finalAtt.Base64Data)
-              .query(`
-                INSERT INTO [Asset3D] (OrderId, AssetName, OwnerCompanyId, CreatedBy, AssetType, Price, Base64Data, PublishStatus, IsMarketplace)
-                OUTPUT INSERTED.AssetId
-                VALUES (@CompOrderId, @AssetName, @AssetOwnerId, @CreatedByArtist, 'ORDER', @AssetPrice, @AssetBase64, 'PUBLISHED', 0)
-              `)
-            const newAssetId = assetRes.recordset[0].AssetId
+        // 5. Create MarketplaceOrder (INTERNAL)
+        // Get SellerCompanyId for the artist
+        const sellerCompRes = await request.input('ArtistUserId', sql.Int, sellerId).query(`
+          SELECT CompanyId FROM [User] WHERE UserId = @ArtistUserId
+        `)
+        const sellerCompanyId = sellerCompRes.recordset[0]?.CompanyId || 1 // Fallback to system company
 
-            // 5. Create MarketplaceOrder (INTERNAL)
-            // Get SellerCompanyId for the artist
-            const sellerCompRes = await request.input('ArtistUserId', sql.Int, sellerId).query(`
-              SELECT CompanyId FROM [User] WHERE UserId = @ArtistUserId
-            `)
-            const sellerCompanyId = sellerCompRes.recordset[0]?.CompanyId || 1 // Fallback to system company
-
-            await request
-              .input('MpAssetId', sql.Int, newAssetId)
-              .input('MpBuyerCompanyId', sql.Int, order.CompanyId)
-              .input('MpBuyerUserId', sql.Int, order.CreatedByUserId)
-              .input('MpSellerCompanyId', sql.Int, sellerCompanyId)
-              .input('MpPrice', sql.Decimal(18, 2), numericPrice)
-              .query(`
-                INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, BuyerUserId, SellerCompanyId, Price, Status)
-                VALUES (@MpAssetId, @MpBuyerCompanyId, @MpBuyerUserId, @MpSellerCompanyId, @MpPrice, 'PENDING')
-              `)
-          }
-        }
+        await request
+          .input('MpAssetId', sql.Int, newAssetId)
+          .input('MpBuyerCompanyId', sql.Int, order.CompanyId)
+          .input('MpBuyerUserId', sql.Int, order.CreatedByUserId)
+          .input('MpSellerCompanyId', sql.Int, sellerCompanyId)
+          .input('MpPrice', sql.Decimal(18, 2), numericPrice)
+          .query(`
+            INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, BuyerUserId, SellerCompanyId, Price, Status)
+            VALUES (@MpAssetId, @MpBuyerCompanyId, @MpBuyerUserId, @MpSellerCompanyId, @MpPrice, 'PENDING')
+          `)
       } catch (err) {
         console.error('Order-to-Purchase Automation Warning:', err)
         // We don't fail the whole status update if automation fails, but we log it.
@@ -503,7 +566,7 @@ export const updateOrder = async (
   if (updates.Budget !== undefined) {
     try {
       const budgetStr = updates.Budget || "0"
-      const numericPrice = parseFloat(budgetStr.replace(/[^0-9.]/g, '')) || 0
+      const numericPrice = parseBudgetToPrice(budgetStr)
 
       // Update Asset3D price
       const assetRes = await pool.request()

@@ -212,7 +212,7 @@ export const listMyPurchases = async (userId: number): Promise<MarketplaceOrder[
       .request()
       .input('BuyerUserId', sql.Int, userId)
       .query(`
-        SELECT mo.*, bu.UserName as BuyerName, bu.Phone as BuyerPhone, a.AssetName
+        SELECT mo.*, bu.UserName as BuyerName, bu.Phone as BuyerPhone, a.AssetName, a.OrderId
         FROM [MarketplaceOrder] mo
         LEFT JOIN [User] bu ON mo.BuyerUserId = bu.UserId
         LEFT JOIN [Asset3D] a ON mo.AssetId = a.AssetId
@@ -227,7 +227,7 @@ export const listMyPurchases = async (userId: number): Promise<MarketplaceOrder[
     .input('BuyerCompanyId', sql.Int, buyerCompanyId)
     .input('BuyerUserId', sql.Int, userId)
     .query(`
-      SELECT mo.*, bu.UserName as BuyerName, bu.Phone as BuyerPhone, a.AssetName
+      SELECT mo.*, bu.UserName as BuyerName, bu.Phone as BuyerPhone, a.AssetName, a.OrderId
       FROM [MarketplaceOrder] mo
       LEFT JOIN [User] bu ON mo.BuyerUserId = bu.UserId
       LEFT JOIN [Asset3D] a ON mo.AssetId = a.AssetId

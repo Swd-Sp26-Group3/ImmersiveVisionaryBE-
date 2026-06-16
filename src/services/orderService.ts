@@ -94,10 +94,6 @@ export const parseBudgetToPrice = (budgetStr: string): number => {
 
     const numPart = parseFloat(s.replace(/[^0-9.]/g, '')) || 0
 
-    if (numPart > 0 && numPart < 50000) {
-      return numPart * 1000
-    }
-
     return numPart
   }
 

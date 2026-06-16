@@ -77,11 +77,11 @@ const getOrCreateUserCompanyId = async (userId: number): Promise<number> => {
 
 const getAssetForMarketplace = async (
   assetId: number
-): Promise<{ AssetId: number; OwnerCompanyId: number | null; Price: number | null } | null> => {
+): Promise<{ AssetId: number; OwnerCompanyId: number | null; CreatedBy: number; Price: number | null } | null> => {
   const pool = await getDbPool()
 
   const result = await pool.request().input('AssetId', sql.Int, assetId).query(`
-    SELECT AssetId, OwnerCompanyId, Price, IsMarketplace, PublishStatus, IsDeleted
+    SELECT AssetId, OwnerCompanyId, CreatedBy, Price, IsMarketplace, PublishStatus, IsDeleted
     FROM [Asset3D]
     WHERE AssetId = @AssetId
   `)
@@ -126,7 +126,12 @@ export const createMarketplaceOrder = async (
     throw new Error('ASSET_NOT_AVAILABLE')
   }
 
-  if (asset.OwnerCompanyId && asset.OwnerCompanyId === buyerCompanyId) {
+  let sellerCompanyId = asset.OwnerCompanyId
+  if (!sellerCompanyId) {
+    sellerCompanyId = await getOrCreateUserCompanyId(asset.CreatedBy)
+  }
+
+  if (sellerCompanyId === buyerCompanyId) {
     throw new Error('CANNOT_BUY_OWN_ASSET')
   }
 
@@ -156,12 +161,7 @@ export const createMarketplaceOrder = async (
     .input('BuyerUserId', sql.Int, userId)
     .input('Price', sql.Decimal(18, 2), asset.Price)
     .input('Status', sql.NVarChar(50), 'PENDING')
-
-  if (asset.OwnerCompanyId) {
-    request.input('SellerCompanyId', sql.Int, asset.OwnerCompanyId)
-  } else {
-    request.input('SellerCompanyId', sql.Int, null)
-  }
+    .input('SellerCompanyId', sql.Int, sellerCompanyId)
 
   const result = await request.query(`
       INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, BuyerUserId, SellerCompanyId, Price, Status)

@@ -6,9 +6,9 @@ import {
   getPaymentById,
   listPayments,
   updatePaymentStatus,
+  getPendingPaymentByMpOrderId,
   type PaymentType
 } from '../services/paymentService'
-import { createPaymentUrl, verifySecureHash } from '../services/vnpayService'
 import { updateMarketplaceOrderStatus, findPendingMarketplaceOrder } from '../services/marketplaceOrderService'
 import { updateOrderStatus } from '../services/orderService'
 import { getAssetById } from '../services/assetService'
@@ -251,180 +251,80 @@ export const listPaymentsHandler = async (req: AuthRequest, res: Response): Prom
   }
 }
 
+
+
 /**
- * Handle VNPay payment URL creation
+ * Handle SePay Webhook Callback
  */
-export const createVnpayUrlHandler = async (req: AuthRequest, res: Response): Promise<void> => {
+export const sepayWebhookHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user) {
-      res.status(401).json({ message: 'Unauthorized' })
+    const sepayApiKey = process.env.SEPAY_API_KEY
+    if (sepayApiKey) {
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Apikey ') || authHeader.slice(7) !== sepayApiKey) {
+        res.status(401).json({ success: false, message: 'Unauthorized' })
+        return
+      }
+    }
+
+    const { content, transferAmount } = req.body
+    if (!content) {
+      res.status(400).json({ success: false, message: 'Content is required' })
       return
     }
 
-    const { paymentId, bankCode, locale } = req.body
-
-    if (!paymentId || !Number.isInteger(paymentId)) {
-      res.status(400).json({ message: 'paymentId is required' })
+    // Parse the number from content (e.g. DH102969 or SEVQR TKPIMV 102969)
+    const match = content.match(/DH(\d+)/i) || content.match(/SEVQR\s+TKPIMV\s+(\d+)/i)
+    if (!match) {
+      res.status(400).json({ success: false, message: 'No transaction code found in content' })
       return
     }
 
-    const payment = await getPaymentById(paymentId)
-    if (!payment) {
-      res.status(404).json({ message: 'Payment not found' })
+    const referenceId = parseInt(match[1])
+    let paymentToConfirm: any = null
+
+    // Try finding by PaymentId first
+    const paymentByPid = await getPaymentById(referenceId)
+    if (paymentByPid && paymentByPid.PaymentStatus === 'PENDING') {
+      paymentToConfirm = paymentByPid
+    } else {
+      // Try finding by MpOrderId
+      const paymentByOid = await getPendingPaymentByMpOrderId(referenceId)
+      if (paymentByOid) {
+        paymentToConfirm = paymentByOid
+      }
+    }
+
+    if (!paymentToConfirm) {
+      res.status(404).json({ success: false, message: 'Pending payment not found' })
       return
     }
 
-    if (payment.PaymentStatus !== 'PENDING') {
-      res.status(400).json({ message: 'Only pending payments can be processed' })
-      return
+    // Confirm payment
+    const payment = await confirmPayment(paymentToConfirm.PaymentId)
+
+    // Sync MarketplaceOrder status if needed
+    if (payment.PaymentType === 'ASSET' && payment.AssetId) {
+      try {
+        const mpOrder = await findPendingMarketplaceOrder(payment.AssetId, payment.CompanyId)
+        if (mpOrder) {
+          await updateMarketplaceOrderStatus(mpOrder.MpOrderId, 'PAID')
+        }
+
+        // Sync back to CreativeOrder if it exists
+        const asset = await getAssetById(payment.AssetId)
+        if (asset && asset.OrderId) {
+          await updateOrderStatus(asset.OrderId, 'COMPLETED')
+        }
+      } catch (syncError) {
+        console.error('Failed to sync MarketplaceOrder/CreativeOrder in sepayWebhookHandler:', syncError)
+      }
     }
 
-    const ipAddr =
-      req.headers['x-forwarded-for'] ||
-      req.connection.remoteAddress ||
-      '127.0.0.1'
-
-    const paymentUrl = createPaymentUrl({
-      amount: payment.Amount,
-      orderId: payment.PaymentId.toString(),
-      orderInfo: `Thanh toan hoa don ${payment.PaymentId}`,
-      ipAddr: typeof ipAddr === 'string' ? ipAddr : ipAddr[0],
-      bankCode,
-      locale
-    })
-
-    res.status(200).json({ success: true, paymentUrl })
+    res.status(200).json({ success: true })
   } catch (error: any) {
-    console.error('Error in createVnpayUrlHandler:', error)
-    res.status(500).json({ message: `Server error while creating VNPay URL: ${error.message}` })
-  }
-}
-
-
-/**
- * Handle VNPay Return URL redirect (Client-side)
- */
-export const vnpayReturnHandler = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const vnpParams = req.query as Record<string, string>
-    const isValid = verifySecureHash(vnpParams)
-
-    if (!isValid) {
-      res.status(400).send('Invalid signature')
-      return
-    }
-
-    const responseCode = vnpParams['vnp_ResponseCode']
-    const paymentId = parseInt(vnpParams['vnp_TxnRef'])
-
-    if (responseCode === '00') {
-      // 1. Update Payment status to PAID
-      const payment = await confirmPayment(paymentId)
-
-      // 2. Sync MarketplaceOrder status if needed
-      let mpOrderId: number | null = null
-      if (payment.PaymentType === 'ASSET' && payment.AssetId) {
-        try {
-          const mpOrder = await findPendingMarketplaceOrder(payment.AssetId, payment.CompanyId)
-          if (mpOrder) {
-            await updateMarketplaceOrderStatus(mpOrder.MpOrderId, 'PAID')
-            mpOrderId = mpOrder.MpOrderId
-          }
-
-          // Sync back to CreativeOrder if it exists
-          const asset = await getAssetById(payment.AssetId)
-          if (asset && asset.OrderId) {
-            await updateOrderStatus(asset.OrderId, 'COMPLETED')
-          }
-        } catch (syncError) {
-          console.error('Failed to sync MarketplaceOrder/CreativeOrder in vnpayReturnHandler:', syncError)
-        }
-      }
-
-      // 3. Redirect to Frontend Success Page
-      // We try to find the frontend URL from CORS_ORIGIN or default to localhost:3000
-      const origin = process.env.CORS_ORIGIN || 'http://localhost:3000'
-      const frontendUrl = origin.includes('3000') ? origin : 'http://localhost:3000'
-
-      let redirectUrl = `${frontendUrl}/marketplace/order-success?orderId=${mpOrderId ?? ''}`
-      if (payment.AssetId) {
-        redirectUrl += `&productId=${payment.AssetId}`
-      }
-
-      res.redirect(redirectUrl)
-    } else {
-      const origin = process.env.CORS_ORIGIN || 'http://localhost:3000'
-      const frontendUrl = origin.includes('3000') ? origin : 'http://localhost:3000'
-      res.redirect(`${frontendUrl}/customer-dashboard?tab=purchases&error=vnpay_${responseCode}`)
-    }
-  } catch (error) {
-    console.error('Error in vnpayReturnHandler:', error)
-    res.status(500).send('Server error while processing VNPay return')
-  }
-}
-
-/**
- * Handle VNPay IPN (Server-to-Server callback)
- */
-export const vnpayIpnHandler = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const vnpParams = req.query as Record<string, string>
-    const isValid = verifySecureHash(vnpParams)
-
-    if (!isValid) {
-      res.status(200).json({ RspCode: '97', Message: 'Invalid signature' })
-      return
-    }
-
-    const paymentId = parseInt(vnpParams['vnp_TxnRef'])
-    const vnp_Amount = parseInt(vnpParams['vnp_Amount']) / 100
-    const responseCode = vnpParams['vnp_ResponseCode']
-
-    const payment = await getPaymentById(paymentId)
-    if (!payment) {
-      res.status(200).json({ RspCode: '01', Message: 'Order not found' })
-      return
-    }
-
-    if (payment.Amount !== vnp_Amount) {
-      res.status(200).json({ RspCode: '04', Message: 'Invalid amount' })
-      return
-    }
-
-    if (payment.PaymentStatus !== 'PENDING') {
-      res.status(200).json({ RspCode: '02', Message: 'Order already confirmed' })
-      return
-    }
-
-    // Success
-    if (responseCode === '00') {
-      await updatePaymentStatus(paymentId, 'PAID')
-
-      // If it's an asset purchase, update the MarketplaceOrder too
-      if (payment.PaymentType === 'ASSET' && payment.AssetId) {
-        try {
-          const mpOrder = await findPendingMarketplaceOrder(payment.AssetId, payment.CompanyId)
-          if (mpOrder) {
-            await updateMarketplaceOrderStatus(mpOrder.MpOrderId, 'PAID')
-          }
-
-          // Sync back to CreativeOrder if it exists
-          const asset = await getAssetById(payment.AssetId)
-          if (asset && asset.OrderId) {
-            await updateOrderStatus(asset.OrderId, 'COMPLETED')
-          }
-        } catch (syncError) {
-          console.error('Failed to update statuses in vnpayIpnHandler:', syncError)
-        }
-      }
-    } else {
-      await updatePaymentStatus(paymentId, 'FAILED')
-    }
-
-    res.status(200).json({ RspCode: '00', Message: 'Success' })
-  } catch (error) {
-    console.error('Error in vnpayIpnHandler:', error)
-    res.status(200).json({ RspCode: '99', Message: 'Unknown error' })
+    console.error('Error in sepayWebhookHandler:', error)
+    res.status(500).json({ success: false, message: 'Server error while processing webhook' })
   }
 }
 
@@ -433,9 +333,7 @@ export const paymentController = {
   confirm: confirmPaymentHandler,
   getById: getPaymentDetailHandler,
   list: listPaymentsHandler,
-  createVnpayUrl: createVnpayUrlHandler,
-  vnpayReturn: vnpayReturnHandler,
-  vnpayIpn: vnpayIpnHandler
+  sepayWebhook: sepayWebhookHandler
 }
 
 export default paymentController

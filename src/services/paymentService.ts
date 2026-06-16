@@ -215,3 +215,16 @@ export const updatePaymentStatus = async (paymentId: number, status: PaymentStat
 
   return result.recordset[0]
 }
+
+export const getPendingPaymentByMpOrderId = async (mpOrderId: number): Promise<Payment | null> => {
+  const pool = await getDbPool()
+  const result = await pool
+    .request()
+    .input('MpOrderId', sql.Int, mpOrderId)
+    .query(`
+      SELECT TOP 1 * FROM [Payment]
+      WHERE MpOrderId = @MpOrderId AND PaymentStatus = 'PENDING'
+    `)
+  return result.recordset[0] ?? null
+}
+

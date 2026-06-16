@@ -68,7 +68,11 @@ export const createMarketplaceOrderHandler = async (req: AuthRequest, res: Respo
       return
     }
 
-    res.status(500).json({ message: 'Server error while creating marketplace order' })
+     res.status(500).json({ 
+      message: 'Server error while creating marketplace order',
+      error: error.message,
+      stack: error.stack
+    })
   }
 }
 

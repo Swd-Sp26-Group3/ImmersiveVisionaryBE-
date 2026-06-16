@@ -1,5 +1,6 @@
 import sql from 'mssql'
 import { getDbPool } from '../config/database'
+import { parseBudgetToPrice } from './orderService'
 
 export type MarketplaceOrderStatus = 'PENDING' | 'PAID' | 'DELIVERED' | 'REFUNDED'
 
@@ -202,8 +203,155 @@ export const createInternalMarketplaceOrder = async (
   return result.recordset[0]
 }
 
+const reconcileDeliveredOrders = async (userId: number, companyId: number | null): Promise<void> => {
+  const pool = await getDbPool()
+
+  // Case A: Get delivered orders that have no Asset3D
+  const noAssetResult = await pool
+    .request()
+    .input('UserId', sql.Int, userId)
+    .input('CompanyId', sql.Int, companyId)
+    .query(`
+      SELECT o.OrderId, o.CompanyId, o.CreatedByUserId, o.ProjectName, o.Budget
+      FROM [CreativeOrder] o
+      LEFT JOIN [Asset3D] a ON o.OrderId = a.OrderId
+      WHERE o.Status = 'DELIVERED'
+        AND o.IsDeleted = 0
+        AND (o.CreatedByUserId = @UserId OR (o.CompanyId = @CompanyId AND @CompanyId IS NOT NULL))
+        AND a.AssetId IS NULL
+    `)
+
+  for (const order of noAssetResult.recordset) {
+    const transaction = new sql.Transaction(pool)
+    await transaction.begin()
+    try {
+      // 1. Get attachment
+      const attReq = new sql.Request(transaction)
+      const attRes = await attReq.input('OrderId', sql.Int, order.OrderId).query(`
+        SELECT TOP 1 FileName, Base64Data 
+        FROM OrderAttachment 
+        WHERE OrderId = @OrderId
+        ORDER BY 
+          CASE 
+            WHEN FileName LIKE '%.obj' OR FileName LIKE '%.glb' OR FileName LIKE '%.gltf' OR FileName LIKE '%.zip' OR FileName LIKE '%.blend' THEN 0
+            ELSE 1
+          END,
+          CreatedAt DESC
+      `)
+      const finalAtt = attRes.recordset[0]
+      const assetBase64 = finalAtt ? finalAtt.Base64Data : 'data:application/octet-stream;base64,cGxhY2Vob2xkZXI='
+
+      const numericPrice = parseBudgetToPrice(order.Budget || '0')
+
+      // 2. Get Seller
+      const psReq = new sql.Request(transaction)
+      const psRes = await psReq.input('OrderId', sql.Int, order.OrderId).query(`
+        SELECT TOP 1 AssignedTo FROM ProductionStage WHERE OrderId = @OrderId
+      `)
+      const sellerId = psRes.recordset[0]?.AssignedTo || 1
+
+      // 3. Create Asset3D
+      const assetReq = new sql.Request(transaction)
+      const assetRes = await assetReq
+        .input('OrderId', sql.Int, order.OrderId)
+        .input('AssetName', sql.NVarChar(200), order.ProjectName || `Result for #${order.OrderId}`)
+        .input('AssetOwnerId', sql.Int, order.CompanyId)
+        .input('CreatedByArtist', sql.Int, sellerId)
+        .input('AssetPrice', sql.Decimal(18, 2), numericPrice)
+        .input('AssetBase64', sql.VarChar(sql.MAX), assetBase64)
+        .query(`
+          INSERT INTO [Asset3D] (OrderId, AssetName, OwnerCompanyId, CreatedBy, AssetType, Price, Base64Data, PublishStatus, IsMarketplace)
+          OUTPUT INSERTED.AssetId
+          VALUES (@OrderId, @AssetName, @AssetOwnerId, @CreatedByArtist, 'ORDER', @AssetPrice, @AssetBase64, 'PUBLISHED', 0)
+        `)
+      const newAssetId = assetRes.recordset[0].AssetId
+
+      // 4. Get SellerCompanyId
+      const sellerCompReq = new sql.Request(transaction)
+      const sellerCompRes = await sellerCompReq.input('ArtistUserId', sql.Int, sellerId).query(`
+        SELECT CompanyId FROM [User] WHERE UserId = @ArtistUserId
+      `)
+      const sellerCompanyId = sellerCompRes.recordset[0]?.CompanyId || 1
+
+      // 5. Create MarketplaceOrder
+      const mpOrderReq = new sql.Request(transaction)
+      await mpOrderReq
+        .input('MpAssetId', sql.Int, newAssetId)
+        .input('MpBuyerCompanyId', sql.Int, order.CompanyId)
+        .input('MpBuyerUserId', sql.Int, order.CreatedByUserId)
+        .input('MpSellerCompanyId', sql.Int, sellerCompanyId)
+        .input('MpPrice', sql.Decimal(18, 2), numericPrice)
+        .query(`
+          INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, BuyerUserId, SellerCompanyId, Price, Status)
+          VALUES (@MpAssetId, @MpBuyerCompanyId, @MpBuyerUserId, @MpSellerCompanyId, @MpPrice, 'PENDING')
+        `)
+
+      await transaction.commit()
+      console.log(`[Reconciler] Healed missing Asset3D/MarketplaceOrder for OrderId=${order.OrderId}`)
+    } catch (err) {
+      await transaction.rollback()
+      console.error(`[Reconciler] Error healing OrderId=${order.OrderId}:`, err)
+    }
+  }
+
+  // Case B: Get delivered orders that have Asset3D but no MarketplaceOrder
+  const noMpOrderResult = await pool
+    .request()
+    .input('UserId', sql.Int, userId)
+    .input('CompanyId', sql.Int, companyId)
+    .query(`
+      SELECT o.OrderId, o.CompanyId, o.CreatedByUserId, o.Budget, a.AssetId, a.CreatedBy
+      FROM [CreativeOrder] o
+      INNER JOIN [Asset3D] a ON o.OrderId = a.OrderId
+      LEFT JOIN [MarketplaceOrder] mo ON a.AssetId = mo.AssetId
+      WHERE o.Status = 'DELIVERED'
+        AND o.IsDeleted = 0
+        AND (o.CreatedByUserId = @UserId OR (o.CompanyId = @CompanyId AND @CompanyId IS NOT NULL))
+        AND mo.MpOrderId IS NULL
+    `)
+
+  for (const order of noMpOrderResult.recordset) {
+    const transaction = new sql.Transaction(pool)
+    await transaction.begin()
+    try {
+      const sellerId = order.CreatedBy || 1
+      const numericPrice = parseBudgetToPrice(order.Budget || '0')
+
+      // Get SellerCompanyId
+      const sellerCompReq = new sql.Request(transaction)
+      const sellerCompRes = await sellerCompReq.input('ArtistUserId', sql.Int, sellerId).query(`
+        SELECT CompanyId FROM [User] WHERE UserId = @ArtistUserId
+      `)
+      const sellerCompanyId = sellerCompRes.recordset[0]?.CompanyId || 1
+
+      // Create MarketplaceOrder
+      const mpOrderReq = new sql.Request(transaction)
+      await mpOrderReq
+        .input('MpAssetId', sql.Int, order.AssetId)
+        .input('MpBuyerCompanyId', sql.Int, order.CompanyId)
+        .input('MpBuyerUserId', sql.Int, order.CreatedByUserId)
+        .input('MpSellerCompanyId', sql.Int, sellerCompanyId)
+        .input('MpPrice', sql.Decimal(18, 2), numericPrice)
+        .query(`
+          INSERT INTO [MarketplaceOrder] (AssetId, BuyerCompanyId, BuyerUserId, SellerCompanyId, Price, Status)
+          VALUES (@MpAssetId, @MpBuyerCompanyId, @MpBuyerUserId, @MpSellerCompanyId, @MpPrice, 'PENDING')
+        `)
+
+      await transaction.commit()
+      console.log(`[Reconciler] Healed missing MarketplaceOrder for OrderId=${order.OrderId}`)
+    } catch (err) {
+      await transaction.rollback()
+      console.error(`[Reconciler] Error healing MpOrder for OrderId=${order.OrderId}:`, err)
+    }
+  }
+}
+
 export const listMyPurchases = async (userId: number): Promise<MarketplaceOrder[]> => {
   const buyerCompanyId = await getUserCompanyId(userId)
+  
+  // Reconcile and auto-heal any missing purchase records for DELIVERED custom orders
+  await reconcileDeliveredOrders(userId, buyerCompanyId)
+
   const pool = await getDbPool()
 
   // If user has no company, query by BuyerUserId

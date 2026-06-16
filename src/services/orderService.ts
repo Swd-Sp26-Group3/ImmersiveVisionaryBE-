@@ -423,7 +423,8 @@ export const updateOrderStatus = async (
     if (status === 'DELIVERED') {
       try {
         // 1. Get final attachment (prioritizing 3D/zip files)
-        const attRes = await request.input('CompOrderId', sql.Int, orderId).query(`
+        const attReq = new sql.Request(transaction)
+        const attRes = await attReq.input('CompOrderId', sql.Int, orderId).query(`
           SELECT TOP 1 FileName, Base64Data 
           FROM OrderAttachment 
           WHERE OrderId = @CompOrderId
@@ -442,13 +443,16 @@ export const updateOrderStatus = async (
         const numericPrice = parseBudgetToPrice(budgetStr)
 
         // 3. Get Seller (Artist) from ProductionStage
-        const psRes = await request.query(`
+        const psReq = new sql.Request(transaction)
+        const psRes = await psReq.input('CompOrderId', sql.Int, orderId).query(`
           SELECT TOP 1 AssignedTo FROM ProductionStage WHERE OrderId = @CompOrderId
         `)
         const sellerId = psRes.recordset[0]?.AssignedTo || 1
 
         // 4. Create Asset3D for this delivery
-        const assetRes = await request
+        const assetReq = new sql.Request(transaction)
+        const assetRes = await assetReq
+          .input('CompOrderId', sql.Int, orderId)
           .input('AssetName', sql.NVarChar(200), order.ProjectName || `Result for #${orderId}`)
           .input('AssetOwnerId', sql.Int, order.CompanyId)
           .input('CreatedByArtist', sql.Int, sellerId)
@@ -463,12 +467,14 @@ export const updateOrderStatus = async (
 
         // 5. Create MarketplaceOrder (INTERNAL)
         // Get SellerCompanyId for the artist
-        const sellerCompRes = await request.input('ArtistUserId', sql.Int, sellerId).query(`
+        const sellerCompReq = new sql.Request(transaction)
+        const sellerCompRes = await sellerCompReq.input('ArtistUserId', sql.Int, sellerId).query(`
           SELECT CompanyId FROM [User] WHERE UserId = @ArtistUserId
         `)
         const sellerCompanyId = sellerCompRes.recordset[0]?.CompanyId || 1 // Fallback to system company
 
-        await request
+        const mpOrderReq = new sql.Request(transaction)
+        await mpOrderReq
           .input('MpAssetId', sql.Int, newAssetId)
           .input('MpBuyerCompanyId', sql.Int, order.CompanyId)
           .input('MpBuyerUserId', sql.Int, order.CreatedByUserId)
@@ -483,6 +489,7 @@ export const updateOrderStatus = async (
         // We don't fail the whole status update if automation fails, but we log it.
       }
     }
+
 
     // Nếu status là IN_PRODUCTION và có artistId, tạo ProductionStage
     if (status === 'IN_PRODUCTION' && artistId) {

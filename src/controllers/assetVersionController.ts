@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import type { Response } from 'express'
 import type { AuthRequest } from '../middlewares/authMiddleware'
 import { decompressBase64, resolveUploadedBase64 } from './assetController'
@@ -160,11 +162,26 @@ export const downloadVersionHandler = async (req: AuthRequest, res: Response): P
       return
     }
 
+    let base64 = version.Base64Data
+    if (base64 && base64.startsWith('file:')) {
+      const filePath = base64.slice(5) // strip 'file:'
+      const absolutePath = path.resolve(process.cwd(), filePath)
+      if (fs.existsSync(absolutePath)) {
+        try {
+          base64 = fs.readFileSync(absolutePath, 'utf8')
+        } catch (err) {
+          console.error(`Failed to read asset version file from disk: ${absolutePath}`, err)
+        }
+      } else {
+        console.error(`Asset version file not found on disk at: ${absolutePath}`)
+      }
+    }
+
     res.status(200).json({
       message: 'Get download link successfully',
       data: {
         downloadUrl: version.FileUrl,
-        Base64Data: version.Base64Data
+        Base64Data: base64
       }
     })
   } catch (error) {

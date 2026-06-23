@@ -1,6 +1,6 @@
 import type { Response } from 'express'
 import type { AuthRequest } from '../middlewares/authMiddleware'
-import { decompressBase64 } from './assetController'
+import { decompressBase64, resolveUploadedBase64 } from './assetController'
 import {
   createAssetVersion,
   getAssetVersions,
@@ -32,7 +32,7 @@ export const uploadVersionHandler = async (req: AuthRequest, res: Response): Pro
       return
     }
 
-    const { FileFormat, FileUrl, Base64Data, PolyCount, TextureSize } = req.body
+    const { FileFormat, FileUrl, Base64Data, PolyCount, TextureSize, UploadId } = req.body
 
     if (!FileFormat || !ALLOWED_FILE_FORMATS.includes(FileFormat as FileFormat)) {
       res.status(400).json({ message: `FileFormat is required and must be one of: ${ALLOWED_FILE_FORMATS.join(', ')}` })
@@ -59,7 +59,22 @@ export const uploadVersionHandler = async (req: AuthRequest, res: Response): Pro
       return
     }
 
-    const decompressedBase64 = decompressBase64(Base64Data)
+    let parsedBase64Data = Base64Data
+    try {
+      parsedBase64Data = resolveUploadedBase64(parsedBase64Data, UploadId)
+    } catch (err: any) {
+      if (err.message === 'INVALID_UPLOAD_ID') {
+        res.status(400).json({ message: 'UploadId must be a string' })
+        return
+      }
+      if (err.message === 'UPLOADED_FILE_NOT_FOUND') {
+        res.status(400).json({ message: 'Assembled upload not found. The upload session may have timed out or failed.' })
+        return
+      }
+      throw err
+    }
+
+    const decompressedBase64 = decompressBase64(parsedBase64Data)
 
     const version = await createAssetVersion(assetId, {
       FileFormat: FileFormat as FileFormat,

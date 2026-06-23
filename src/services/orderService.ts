@@ -465,6 +465,25 @@ export const updateOrderStatus = async (
           `)
         const newAssetId = assetRes.recordset[0].AssetId
 
+        // 4b. Create initial AssetVersion record
+        const ext = finalAtt?.FileName?.toLowerCase()?.split('.')?.pop() || 'obj'
+        const fileFormat = ext === 'glb' || ext === 'gltf' ? 'GLB' :
+                           ext === 'fbx' ? 'FBX' :
+                           ext === 'usdz' ? 'USDZ' : 'OBJ'
+
+        const versionReq = new sql.Request(transaction)
+        await versionReq
+          .input('AssetId', sql.Int, newAssetId)
+          .input('FileFormat', sql.NVarChar(50), fileFormat)
+          .input('FileUrl', sql.NVarChar(sql.MAX), finalAtt?.FileName || 'delivery.obj')
+          .input('Base64Data', sql.VarChar(sql.MAX), assetBase64)
+          .input('PolyCount', sql.Int, 0)
+          .input('TextureSize', sql.NVarChar(100), 'Unknown')
+          .query(`
+            INSERT INTO [AssetVersion] (AssetId, FileFormat, FileUrl, Base64Data, PolyCount, TextureSize)
+            VALUES (@AssetId, @FileFormat, @FileUrl, @Base64Data, @PolyCount, @TextureSize)
+          `)
+
         // 5. Create MarketplaceOrder (INTERNAL)
         // Get SellerCompanyId for the artist
         const sellerCompReq = new sql.Request(transaction)

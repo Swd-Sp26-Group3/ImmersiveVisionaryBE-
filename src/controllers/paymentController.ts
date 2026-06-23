@@ -129,9 +129,17 @@ export const createPaymentHandler = async (req: AuthRequest, res: Response): Pro
       PaymentType: PaymentType ?? null
     })
 
+    const accountNumber = process.env.SEPAY_ACCOUNT_NUMBER || '109879775018'
+    const bank = process.env.SEPAY_BANK || 'VietinBank'
+    const va = process.env.SEPAY_VA || 'IMV'
+    const qrUrl = `https://qr.sepay.vn/img?acc=${accountNumber}&bank=${bank}&amount=${payment.Amount}&des=SEVQR+TKP${va}+DH${payment.PaymentId}`
+
     res.status(201).json({
       message: 'Create payment successfully',
-      data: payment
+      data: {
+        ...payment,
+        qrUrl
+      }
     })
   } catch (error: any) {
     console.error('Error in createPaymentHandler:', error)
@@ -205,6 +213,53 @@ export const confirmPaymentHandler = async (req: AuthRequest, res: Response): Pr
   }
 }
 
+/**
+ * Helper to query SePay API for backup transaction verification.
+ */
+const checkSepayTransaction = async (paymentId: number, amount: number): Promise<any | null> => {
+  const token = process.env.SEPAY_API_TOKEN
+  const accountNumber = process.env.SEPAY_ACCOUNT_NUMBER
+  if (!token || !accountNumber) {
+    console.warn('[SePay Backup] SEPAY_API_TOKEN or SEPAY_ACCOUNT_NUMBER is not configured.')
+    return null
+  }
+
+  const baseUrl = 'https://my.sepay.vn/userapi'
+  const url = `${baseUrl}/transactions/list?account_number=${accountNumber}&amount_in=${amount}&limit=20`
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    if (!res.ok) {
+      console.error(`[SePay Backup] SePay API returned status ${res.status}`)
+      return null
+    }
+
+    const data: any = await res.json()
+    if (!data.transactions || !Array.isArray(data.transactions)) {
+      return null
+    }
+
+    const orderCode = `DH${paymentId}`
+    const match = data.transactions.find((tx: any) => {
+      const code = tx.code || ''
+      const content = tx.transaction_content || tx.description || tx.content || ''
+      return code.toLowerCase().includes(orderCode.toLowerCase()) || 
+             content.toLowerCase().includes(orderCode.toLowerCase())
+    })
+
+    return match || null
+  } catch (err) {
+    console.error('[SePay Backup] Error calling SePay API:', err)
+    return null
+  }
+}
+
 export const getPaymentDetailHandler = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (typeof req.params.id !== 'string') {
@@ -217,16 +272,62 @@ export const getPaymentDetailHandler = async (req: AuthRequest, res: Response): 
       return
     }
 
-    const payment = await getPaymentById(paymentId)
+    let payment = await getPaymentById(paymentId)
 
     if (!payment) {
       res.status(404).json({ message: 'Payment not found' })
       return
     }
 
+    // Backup check if the payment is still PENDING
+    if (payment.PaymentStatus === 'PENDING') {
+      const matchedTx = await checkSepayTransaction(paymentId, payment.Amount)
+      if (matchedTx) {
+        console.log(`[SePay Backup] Found matched transaction for paymentId=${paymentId}. Automatically confirming.`)
+        try {
+          // Confirm payment in DB
+          const updatedPayment = await confirmPayment(paymentId)
+          payment = updatedPayment
+
+          // Sync MarketplaceOrder status if needed
+          if (updatedPayment.PaymentType === 'ASSET') {
+            let targetMpOrderId = updatedPayment.MpOrderId
+            if (!targetMpOrderId && updatedPayment.AssetId) {
+              const mpOrder = await findPendingMarketplaceOrder(updatedPayment.AssetId, updatedPayment.CompanyId)
+              if (mpOrder) {
+                targetMpOrderId = mpOrder.MpOrderId
+              }
+            }
+
+            if (targetMpOrderId) {
+              await updateMarketplaceOrderStatus(targetMpOrderId, 'PAID')
+            }
+
+            // Sync back to CreativeOrder if it exists
+            if (updatedPayment.AssetId) {
+              const asset = await getAssetById(updatedPayment.AssetId)
+              if (asset && asset.OrderId) {
+                await updateOrderStatus(asset.OrderId, 'COMPLETED')
+              }
+            }
+          }
+        } catch (confirmError) {
+          console.error('[SePay Backup] Failed to confirm payment automatically:', confirmError)
+        }
+      }
+    }
+
+    const accountNumber = process.env.SEPAY_ACCOUNT_NUMBER || '109879775018'
+    const bank = process.env.SEPAY_BANK || 'VietinBank'
+    const va = process.env.SEPAY_VA || 'IMV'
+    const qrUrl = `https://qr.sepay.vn/img?acc=${accountNumber}&bank=${bank}&amount=${payment.Amount}&des=SEVQR+TKP${va}+DH${payment.PaymentId}`
+
     res.status(200).json({
       message: 'Get payment detail successfully',
-      data: payment
+      data: {
+        ...payment,
+        qrUrl
+      }
     })
   } catch (error) {
     console.error('Error in getPaymentDetailHandler:', error)

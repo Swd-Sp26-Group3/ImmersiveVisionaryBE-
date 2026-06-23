@@ -162,7 +162,10 @@ export const downloadVersionHandler = async (req: AuthRequest, res: Response): P
 
     res.status(200).json({
       message: 'Get download link successfully',
-      data: { downloadUrl: version.FileUrl }
+      data: {
+        downloadUrl: version.FileUrl,
+        Base64Data: version.Base64Data
+      }
     })
   } catch (error) {
     console.error('Error in downloadVersionHandler:', error)

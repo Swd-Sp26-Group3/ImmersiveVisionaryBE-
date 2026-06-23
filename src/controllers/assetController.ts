@@ -28,9 +28,35 @@ export const decompressBase64 = (raw: string | null | undefined): string | null 
     const b64 = raw.slice(5) // strip "gzip:"
     const compressed = Buffer.from(b64, 'base64')
     const decompressed = zlib.gunzipSync(compressed)
-    // Store as a fetchable data URL with a browser-compatible MIME type.
-    // .obj files are plain text — "text/plain" is universally supported by fetch().
-    return 'data:text/plain;charset=utf-8;base64,' + decompressed.toString('base64')
+    
+    // Tự động nhận dạng MIME type dựa trên magic bytes của file sau giải nén
+    let mimePrefix = 'data:application/octet-stream;base64,'
+    if (decompressed.length >= 4) {
+      const magic = decompressed.readUInt32BE(0)
+      if (magic === 0x504B0304) {
+        // ZIP magic: "PK\x03\x04"
+        mimePrefix = 'data:application/zip;base64,'
+      } else if (magic === 0x676C5446) {
+        // glTF binary magic: "glTF"
+        mimePrefix = 'data:model/gltf-binary;base64,'
+      } else {
+        // Kiểm tra xem có phải file văn bản ASCII (như .obj, .gltf JSON) hay không
+        const checkLen = Math.min(decompressed.length, 100)
+        let isAscii = true
+        for (let i = 0; i < checkLen; i++) {
+          const b = decompressed[i]
+          if (b !== 9 && b !== 10 && b !== 13 && (b < 32 || b > 126)) {
+            isAscii = false
+            break
+          }
+        }
+        if (isAscii) {
+          mimePrefix = 'data:text/plain;charset=utf-8;base64,'
+        }
+      }
+    }
+
+    return mimePrefix + decompressed.toString('base64')
   } catch (e) {
     console.error('[decompressBase64] Failed to decompress:', e)
     throw new Error('INVALID_COMPRESSED_DATA')

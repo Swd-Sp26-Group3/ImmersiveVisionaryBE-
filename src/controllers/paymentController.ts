@@ -156,23 +156,33 @@ export const confirmPaymentHandler = async (req: AuthRequest, res: Response): Pr
 
     const payment = await confirmPayment(paymentId)
 
-    // If it's an asset purchase, update the MarketplaceOrder too
-    if (payment.PaymentType === 'ASSET' && payment.AssetId) {
+    // Sync MarketplaceOrder and CreativeOrder status if needed
+    if (payment.PaymentType === 'ASSET') {
       try {
-        const mpOrder = await findPendingMarketplaceOrder(payment.AssetId, payment.CompanyId)
-        if (mpOrder) {
-          await updateMarketplaceOrderStatus(mpOrder.MpOrderId, 'PAID')
+        let targetMpOrderId = payment.MpOrderId
+        if (!targetMpOrderId && payment.AssetId) {
+          const mpOrder = await findPendingMarketplaceOrder(payment.AssetId, payment.CompanyId)
+          if (mpOrder) {
+            targetMpOrderId = mpOrder.MpOrderId
+          }
+        }
+
+        if (targetMpOrderId) {
+          await updateMarketplaceOrderStatus(targetMpOrderId, 'PAID')
         }
 
         // Sync back to CreativeOrder if it exists
-        const asset = await getAssetById(payment.AssetId)
-        if (asset && asset.OrderId) {
-          await updateOrderStatus(asset.OrderId, 'COMPLETED')
+        if (payment.AssetId) {
+          const asset = await getAssetById(payment.AssetId)
+          if (asset && asset.OrderId) {
+            await updateOrderStatus(asset.OrderId, 'COMPLETED')
+          }
         }
       } catch (syncError) {
         console.error('Failed to sync order statuses in confirmPayment:', syncError)
       }
     }
+
 
     res.status(200).json({
       message: 'Confirm payment successfully',
@@ -267,20 +277,52 @@ export const sepayWebhookHandler = async (req: AuthRequest, res: Response): Prom
       }
     }
 
-    const { content, transferAmount } = req.body
-    if (!content) {
-      res.status(400).json({ success: false, message: 'Content is required' })
+    // 1. Chỉ xử lý các giao dịch tiền vào (transferType: "in")
+    const transferType = req.body.transferType || req.body.transfer_type
+    if (transferType && transferType !== 'in') {
+      res.status(200).json({ success: true, message: 'Ignored non-incoming transaction' })
       return
     }
 
-    // Parse the number from content (e.g. DH102969 or SEVQR TKPIMV 102969)
-    const match = content.match(/DH(\d+)/i) || content.match(/SEVQR\s+TKPIMV\s+(\d+)/i)
-    if (!match) {
-      res.status(400).json({ success: false, message: 'No transaction code found in content' })
+    // 2. Lấy nội dung chuyển khoản và mã giao dịch từ các field SePay gửi về
+    const rawCode = req.body.code
+    const rawContent = req.body.content || req.body.transactionContent || req.body.transaction_content || req.body.description
+
+    if (!rawCode && !rawContent) {
+      res.status(400).json({ success: false, message: 'Transaction code or content is required' })
       return
     }
 
-    const referenceId = parseInt(match[1])
+    let referenceId: number | null = null
+
+    // 1. Parse từ field code do SePay trích xuất (nếu có và hợp lệ)
+    if (rawCode) {
+      const codeStr = String(rawCode).trim()
+      const matchDH = codeStr.match(/DH\s*[-_]?\s*(\d+)/i)
+      if (matchDH) {
+        referenceId = parseInt(matchDH[1])
+      } else if (/^\d+$/.test(codeStr)) {
+        referenceId = parseInt(codeStr)
+      }
+    }
+
+    // 2. Nếu chưa lấy được, parse từ content/description bằng regex chặt chẽ
+    if (!referenceId && rawContent) {
+      const contentStr = String(rawContent).replace(/\s+/g, ' ').trim()
+      const match = contentStr.match(/SEVQR\s+TKPIMV\s*(?:DH\s*[-_]?\s*)?(\d+)/i) ||
+                    contentStr.match(/TKPIMV\s*(?:DH\s*[-_]?\s*)?(\d+)/i) ||
+                    contentStr.match(/DH\s*[-_]?\s*(\d+)/i)
+      if (match) {
+        referenceId = parseInt(match[1])
+      }
+    }
+
+    if (!referenceId) {
+      res.status(400).json({ success: false, message: 'No valid transaction code found in payload' })
+      return
+    }
+
+    console.log(`[SePay Webhook] Parsed Reference ID: ${referenceId}`)
     let paymentToConfirm: any = null
 
     // Try finding by PaymentId first
@@ -300,26 +342,49 @@ export const sepayWebhookHandler = async (req: AuthRequest, res: Response): Prom
       return
     }
 
+    // 3. Kiểm tra số tiền chuyển khoản thực tế so với số tiền cần thanh toán
+    const transferAmount = req.body.transferAmount || req.body.transfer_amount
+    const amountPaid = Number(transferAmount)
+    
+    if (isNaN(amountPaid) || amountPaid < paymentToConfirm.Amount) {
+      console.warn(`[SePay Webhook] Amount mismatch. Expected ${paymentToConfirm.Amount}, but received ${amountPaid}`)
+      res.status(400).json({ 
+        success: false, 
+        message: `Amount mismatch. Expected: ${paymentToConfirm.Amount}, Received: ${amountPaid}` 
+      })
+      return
+    }
+
     // Confirm payment
     const payment = await confirmPayment(paymentToConfirm.PaymentId)
 
     // Sync MarketplaceOrder status if needed
-    if (payment.PaymentType === 'ASSET' && payment.AssetId) {
+    if (payment.PaymentType === 'ASSET') {
       try {
-        const mpOrder = await findPendingMarketplaceOrder(payment.AssetId, payment.CompanyId)
-        if (mpOrder) {
-          await updateMarketplaceOrderStatus(mpOrder.MpOrderId, 'PAID')
+        let targetMpOrderId = payment.MpOrderId
+        if (!targetMpOrderId && payment.AssetId) {
+          const mpOrder = await findPendingMarketplaceOrder(payment.AssetId, payment.CompanyId)
+          if (mpOrder) {
+            targetMpOrderId = mpOrder.MpOrderId
+          }
+        }
+
+        if (targetMpOrderId) {
+          await updateMarketplaceOrderStatus(targetMpOrderId, 'PAID')
         }
 
         // Sync back to CreativeOrder if it exists
-        const asset = await getAssetById(payment.AssetId)
-        if (asset && asset.OrderId) {
-          await updateOrderStatus(asset.OrderId, 'COMPLETED')
+        if (payment.AssetId) {
+          const asset = await getAssetById(payment.AssetId)
+          if (asset && asset.OrderId) {
+            await updateOrderStatus(asset.OrderId, 'COMPLETED')
+          }
         }
       } catch (syncError) {
         console.error('Failed to sync MarketplaceOrder/CreativeOrder in sepayWebhookHandler:', syncError)
       }
     }
+
 
     res.status(200).json({ success: true })
   } catch (error: any) {

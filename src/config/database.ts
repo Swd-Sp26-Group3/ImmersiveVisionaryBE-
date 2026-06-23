@@ -135,6 +135,38 @@ const ensureCompatibilityColumns = async (dbPool: sql.ConnectionPool): Promise<v
       )
         ALTER TABLE dbo.AssetVersion ALTER COLUMN [Base64Data] VARCHAR(MAX) NULL;
     END
+
+    -- Ensure Check Constraint on FileFormat includes OBJ
+    IF OBJECT_ID(N'dbo.AssetVersion', N'U') IS NOT NULL
+    BEGIN
+      DECLARE @OldConstName NVARCHAR(200);
+      WHILE EXISTS (
+        SELECT 1 FROM sys.check_constraints
+        WHERE parent_object_id = OBJECT_ID(N'dbo.AssetVersion')
+          AND (definition LIKE N'%FileFormat%' OR name LIKE N'%FileF%')
+          AND definition NOT LIKE N'%OBJ%'
+      )
+      BEGIN
+        SELECT TOP 1 @OldConstName = name
+        FROM sys.check_constraints
+        WHERE parent_object_id = OBJECT_ID(N'dbo.AssetVersion')
+          AND (definition LIKE N'%FileFormat%' OR name LIKE N'%FileF%')
+          AND definition NOT LIKE N'%OBJ%';
+        
+        EXEC('ALTER TABLE dbo.AssetVersion DROP CONSTRAINT [' + @OldConstName + ']');
+      END
+
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.check_constraints
+        WHERE parent_object_id = OBJECT_ID(N'dbo.AssetVersion')
+          AND name = N'CK_AssetVersion_FileFormat'
+      )
+      BEGIN
+        ALTER TABLE dbo.AssetVersion
+        ADD CONSTRAINT CK_AssetVersion_FileFormat
+        CHECK (FileFormat IN (N'GLB', N'USDZ', N'FBX', N'WEBAR', N'OBJ'));
+      END
+    END
   `)
 }
 

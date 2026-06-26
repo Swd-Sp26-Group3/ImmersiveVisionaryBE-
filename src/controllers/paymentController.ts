@@ -225,6 +225,7 @@ const checkSepayTransaction = async (paymentId: number, amount: number): Promise
   }
 
   const baseUrl = 'https://my.sepay.vn/userapi'
+  // Chỉ lấy 20 giao dịch gần nhất theo amount — sau đó filter nghiêm ngặt theo paymentId
   const url = `${baseUrl}/transactions/list?account_number=${accountNumber}&amount_in=${amount}&limit=20`
 
   try {
@@ -245,12 +246,35 @@ const checkSepayTransaction = async (paymentId: number, amount: number): Promise
       return null
     }
 
+    // PHẢI khớp chính xác DH{paymentId} trong content hoặc code
+    // Không được match chỉ theo amount — tránh confirm nhầm giao dịch cũ cùng số tiền
     const orderCode = `DH${paymentId}`
+    // Chỉ chấp nhận giao dịch trong vòng 24 giờ qua
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000
+
     const match = data.transactions.find((tx: any) => {
-      const code = tx.code || ''
-      const content = tx.transaction_content || tx.description || tx.content || ''
-      return code.toLowerCase().includes(orderCode.toLowerCase()) || 
-             content.toLowerCase().includes(orderCode.toLowerCase())
+      const code = String(tx.code || '').trim()
+      const content = String(tx.transaction_content || tx.description || tx.content || '').trim()
+
+      // Kiểm tra paymentId xuất hiện đúng trong content/code
+      const hasCorrectId = (
+        code.toLowerCase().includes(orderCode.toLowerCase()) ||
+        content.toLowerCase().includes(orderCode.toLowerCase())
+      )
+
+      if (!hasCorrectId) return false
+
+      // Kiểm tra thời gian giao dịch trong vòng 24h
+      const txTimeStr = tx.transaction_date || tx.when_happened || tx.created_at || tx.date
+      if (txTimeStr) {
+        const txTime = new Date(txTimeStr).getTime()
+        if (!isNaN(txTime) && txTime < oneDayAgo) {
+          console.warn(`[SePay Backup] Transaction matched DH${paymentId} but is older than 24h, skipping.`)
+          return false
+        }
+      }
+
+      return true
     })
 
     return match || null
@@ -456,38 +480,34 @@ export const sepayWebhookHandler = async (req: AuthRequest, res: Response): Prom
       return
     }
 
-    // Confirm payment
-    const payment = await confirmPayment(paymentToConfirm.PaymentId)
-
-    // Sync MarketplaceOrder status if needed
-    if (payment.PaymentType === 'ASSET') {
-      try {
-        let targetMpOrderId = payment.MpOrderId
-        if (!targetMpOrderId && payment.AssetId) {
-          const mpOrder = await findPendingMarketplaceOrder(payment.AssetId, payment.CompanyId)
-          if (mpOrder) {
-            targetMpOrderId = mpOrder.MpOrderId
-          }
-        }
-
-        if (targetMpOrderId) {
-          await updateMarketplaceOrderStatus(targetMpOrderId, 'PAID')
-        }
-
-        // Sync back to CreativeOrder if it exists
-        if (payment.AssetId) {
-          const asset = await getAssetById(payment.AssetId)
-          if (asset && asset.OrderId) {
-            await updateOrderStatus(asset.OrderId, 'COMPLETED')
-          }
-        }
-      } catch (syncError) {
-        console.error('Failed to sync MarketplaceOrder/CreativeOrder in sepayWebhookHandler:', syncError)
-      }
-    }
-
-
+    // Trả 200 ngay cho SePay để tránh timeout/retry trên Vercel serverless
     res.status(200).json({ success: true })
+
+    // Xử lý bất đồng bộ sau khi đã trả response
+    ;(async () => {
+      try {
+        const payment = await confirmPayment(paymentToConfirm.PaymentId)
+
+        if (payment.PaymentType === 'ASSET') {
+          let targetMpOrderId = payment.MpOrderId
+          if (!targetMpOrderId && payment.AssetId) {
+            const mpOrder = await findPendingMarketplaceOrder(payment.AssetId, payment.CompanyId)
+            if (mpOrder) targetMpOrderId = mpOrder.MpOrderId
+          }
+          if (targetMpOrderId) {
+            await updateMarketplaceOrderStatus(targetMpOrderId, 'PAID')
+          }
+          if (payment.AssetId) {
+            const asset = await getAssetById(payment.AssetId)
+            if (asset && asset.OrderId) {
+              await updateOrderStatus(asset.OrderId, 'COMPLETED')
+            }
+          }
+        }
+      } catch (asyncError) {
+        console.error('[SePay Webhook] Async post-processing error:', asyncError)
+      }
+    })()
   } catch (error: any) {
     console.error('Error in sepayWebhookHandler:', error)
     res.status(500).json({ success: false, message: 'Server error while processing webhook' })

@@ -508,16 +508,37 @@ export const updateMarketplaceOrderStatus = async (
 ): Promise<MarketplaceOrder> => {
   const pool = await getDbPool()
 
-  const result = await pool
-    .request()
-    .input('MpOrderId', sql.Int, mpOrderId)
-    .input('Status', sql.NVarChar(50), status)
-    .query(`
+  // Guard: chỉ cho phép chuyển trạng thái hợp lệ, tránh downgrade (PAID → PENDING)
+  // PENDING → PAID, PAID → DELIVERED. REFUNDED là trạng thái cuối, không đổi được.
+  const allowedFromMap: Partial<Record<MarketplaceOrderStatus, MarketplaceOrderStatus[]>> = {
+    PAID:      ['PENDING'],
+    DELIVERED: ['PENDING', 'PAID'],
+  }
+  const allowedFrom = allowedFromMap[status]
+
+  let query: string
+  if (allowedFrom && allowedFrom.length > 0) {
+    const inClause = allowedFrom.map(s => `'${s}'`).join(', ')
+    query = `
+      UPDATE [MarketplaceOrder]
+      SET Status = @Status
+      OUTPUT INSERTED.*
+      WHERE MpOrderId = @MpOrderId AND Status IN (${inClause})
+    `
+  } else {
+    query = `
       UPDATE [MarketplaceOrder]
       SET Status = @Status
       OUTPUT INSERTED.*
       WHERE MpOrderId = @MpOrderId
-    `)
+    `
+  }
+
+  const result = await pool
+    .request()
+    .input('MpOrderId', sql.Int, mpOrderId)
+    .input('Status', sql.NVarChar(50), status)
+    .query(query)
 
   if (result.recordset.length === 0) {
     throw new Error('ORDER_NOT_FOUND')
